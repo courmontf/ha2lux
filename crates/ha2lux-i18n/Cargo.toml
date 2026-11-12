@@ -8,6 +8,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+ha2lux-core.workspace = true
 fluent-bundle = "0.16"
 unic-langid = "0.9"
 

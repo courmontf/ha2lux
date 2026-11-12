@@ -21,6 +21,9 @@ fn emit(outcome: &Outcome) -> ExitCode {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
+    // Langue du fichier de configuration, avant d'afficher quoi que ce soit (l'aide
+    // et `doctor` fonctionnent sans le démon).
+    ha2lux_i18n::config::init_from_config();
     let cli = match parse(std::env::args().skip(1)) {
         Ok(Parsed::Output(text)) => {
             print!("{text}");

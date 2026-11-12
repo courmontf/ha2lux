@@ -19,6 +19,8 @@ fn config_file() -> PathBuf {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Langue du fichier de configuration, avant d'afficher quoi que ce soit.
+    ha2lux_i18n::config::init_from_config();
     match std::env::args().nth(1).as_deref() {
         None => {}
         Some("--help" | "-h") => {

@@ -39,6 +39,7 @@
 //! vérifie que toute clé citée dans le code existe dans le catalogue.
 #![forbid(unsafe_code)]
 
+pub mod config;
 pub mod wire;
 
 use std::sync::OnceLock;
@@ -116,9 +117,24 @@ fn language_code(value: &str) -> Option<String> {
 /// `LC_MESSAGES`, `LANG`. Le premier code reconnu parmi [`available`] gagne ;
 /// sinon [`FALLBACK_LANG`].
 pub fn detect(var: impl Fn(&str) -> Option<String>) -> &'static str {
-    let candidates = [LANG_ENV, "LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"];
-    for name in candidates {
-        let Some(raw) = var(name) else { continue };
+    detect_with(None, var)
+}
+
+/// Comme [`detect`], avec la langue du fichier de configuration (`preferred`) :
+/// elle passe après `HA2LUX_LANG` mais avant les variables de la session. `auto`
+/// (ou `None`) revient à ne pas en avoir. Une langue inconnue est ignorée.
+pub fn detect_with(preferred: Option<&str>, var: impl Fn(&str) -> Option<String>) -> &'static str {
+    let mut candidates: Vec<String> = Vec::new();
+    candidates.extend(var(LANG_ENV));
+    candidates.extend(
+        preferred
+            .filter(|lang| !lang.eq_ignore_ascii_case("auto"))
+            .map(str::to_owned),
+    );
+    for name in ["LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"] {
+        candidates.extend(var(name));
+    }
+    for raw in candidates {
         for part in raw.split(':') {
             if let Some(code) = language_code(part)
                 && let Some(found) = CATALOGS.iter().find(|c| c.lang == code)
@@ -128,6 +144,16 @@ pub fn detect(var: impl Fn(&str) -> Option<String>) -> &'static str {
         }
     }
     FALLBACK_LANG
+}
+
+/// Langue demandée par le fichier de configuration, fixée avant la première traduction.
+static PREFERRED: OnceLock<String> = OnceLock::new();
+
+/// Fixe la langue du fichier de configuration. À appeler au tout début de `main`,
+/// avant tout texte affiché ; sans effet (renvoie `false`) si une traduction a déjà
+/// eu lieu ou si elle est déjà fixée.
+pub fn set_preferred(lang: &str) -> bool {
+    CURRENT.get().is_none() && PREFERRED.set(lang.to_owned()).is_ok()
 }
 
 /// Les messages d'une langue, avec repli sur [`FALLBACK_LANG`].
@@ -212,7 +238,9 @@ static CURRENT: OnceLock<Localizer> = OnceLock::new();
 /// Le localisateur du processus, initialisé au premier appel d'après l'environnement.
 pub fn current() -> &'static Localizer {
     CURRENT.get_or_init(|| {
-        let lang = detect(|name| std::env::var(name).ok());
+        let lang = detect_with(PREFERRED.get().map(String::as_str), |name| {
+            std::env::var(name).ok()
+        });
         match Localizer::try_new(lang) {
             Ok(localizer) => localizer,
             // Catalogue embarqué invalide : impossible en pratique (testé).
@@ -286,6 +314,21 @@ mod tests {
         // Une valeur inconnue est ignorée au profit de la suivante.
         assert_eq!(detect(env(&[("LANGUAGE", "zz:fr"), ("LANG", "zz")])), "fr");
         assert_eq!(detect(env(&[(LANG_ENV, "fr"), ("LC_ALL", "zz")])), "fr");
+    }
+
+    #[test]
+    fn detect_with_puts_the_config_between_the_override_and_the_session() {
+        // Le fichier de configuration l'emporte sur la session...
+        let session = [("LANG", "en_US.UTF-8")];
+        assert_eq!(detect_with(Some("fr"), env(&session)), "fr");
+        // ... mais pas sur HA2LUX_LANG.
+        let forced = [(LANG_ENV, "en"), ("LANG", "fr_FR.UTF-8")];
+        assert_eq!(detect_with(Some("fr"), env(&forced)), "en");
+        // `auto`, l'absence de valeur et une langue inconnue laissent la session décider.
+        let fr_session = [("LANG", "fr_FR.UTF-8")];
+        for ignored in [Some("auto"), Some("AUTO"), None, Some("zz")] {
+            assert_eq!(detect_with(ignored, env(&fr_session)), "fr", "{ignored:?}");
+        }
     }
 
     #[test]

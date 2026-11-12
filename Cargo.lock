@@ -775,6 +775,7 @@ name = "ha2lux-i18n"
 version = "0.6.0"
 dependencies = [
  "fluent-bundle",
+ "ha2lux-core",
  "unic-langid",
 ]
 

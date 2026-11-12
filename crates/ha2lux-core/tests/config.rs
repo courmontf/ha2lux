@@ -295,3 +295,57 @@ fn entity_id_validation() {
         assert!(!is_valid_entity_id(bad), "{bad}");
     }
 }
+
+#[test]
+fn language_defaults_to_auto_and_is_normalized() {
+    assert_eq!(load("").0.general.language, "auto");
+    assert_eq!(
+        load("[general]\nlanguage = \"fr\"").0.general.language,
+        "fr"
+    );
+    // Casse et espaces tolérés ; `pt-br` est un code valide.
+    assert_eq!(
+        load("[general]\nlanguage = \" EN \"").0.general.language,
+        "en"
+    );
+    assert_eq!(
+        load("[general]\nlanguage = \"pt-BR\"").0.general.language,
+        "pt-br"
+    );
+    let (config, issues) = load("[general]\nlanguage = \"AUTO\"");
+    assert_eq!(config.general.language, "auto");
+    assert!(issues.is_empty(), "{issues:?}");
+}
+
+#[test]
+fn invalid_language_falls_back_to_auto_with_a_warning() {
+    for bad in [
+        "français",
+        "fr fr",
+        "-fr",
+        "1",
+        "klingon-de-la-mort",
+        "fr/en",
+    ] {
+        let (config, issues) = load(&format!("[general]\nlanguage = \"{bad}\""));
+        assert_eq!(config.general.language, "auto", "{bad}");
+        assert!(
+            issues
+                .iter()
+                .any(|(path, sev)| path == "general.language" && *sev == Severity::Warning),
+            "{bad} : {issues:?}"
+        );
+    }
+    // Mauvais type : signalé aussi.
+    let (config, issues) = load("[general]\nlanguage = 3");
+    assert_eq!(config.general.language, "auto");
+    assert!(issues.iter().any(|(path, _)| path == "general.language"));
+}
+
+#[test]
+fn language_survives_a_rewrite_of_the_file() {
+    let (config, _) = load("[general]\nlanguage = \"en\"");
+    let text = config.to_toml().unwrap();
+    assert!(text.contains("language = \"en\""), "{text}");
+    assert_eq!(load(&text).0.general.language, "en");
+}

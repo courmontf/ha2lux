@@ -46,6 +46,8 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Langue du fichier de configuration, avant d'afficher quoi que ce soit.
+    ha2lux_i18n::config::init_from_config();
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         None => {}

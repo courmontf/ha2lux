@@ -92,6 +92,26 @@ pub struct General {
     /// GPU (pilote NVIDIA propriétaire, sans lien `ddc` dans sysfs). Désactivé
     /// par défaut : cela effectue de vraies lectures I²C (décision 48).
     pub edid_bus_matching: bool,
+    /// Langue de l'interface : `auto` (suit la session) ou un code de langue (`fr`, `en`…).
+    /// Le choix de la langue elle-même (et le repli sur une langue absente) est fait par
+    /// `ha2lux-i18n`, qui seul connaît les langues disponibles.
+    pub language: String,
+}
+
+/// Valeur par défaut de [`General::language`].
+pub const LANGUAGE_AUTO: &str = "auto";
+
+/// Vrai pour `auto` ou un code de langue simple (`fr`, `en`, `pt-br`).
+fn valid_language(code: &str) -> bool {
+    code == LANGUAGE_AUTO
+        || (code.len() <= 8
+            && code.split(['-', '_']).all(|part| {
+                !part.is_empty()
+                    && part
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            })
+            && code.chars().next().is_some_and(|c| c.is_ascii_lowercase()))
 }
 
 /// Preset nommé.
@@ -304,6 +324,7 @@ impl Default for Config {
             general: General {
                 step: 5,
                 edid_bus_matching: false,
+                language: LANGUAGE_AUTO.to_owned(),
             },
             presets: vec![
                 preset("Night", 30),
@@ -439,7 +460,7 @@ impl Reader {
                 self.note(
                     Severity::Warning,
                     path,
-                    format!("texte trop long (maximum {max_chars}), ignoré"),
+                    format!("text too long (maximum {max_chars}), ignored"),
                 );
                 String::new()
             }
@@ -908,13 +929,34 @@ impl Config {
         );
 
         let general = r.table("general", &root, "general", &empty);
-        r.unknown_keys("general", general, &["step", "edid_bus_matching"]);
+        r.unknown_keys(
+            "general",
+            general,
+            &["step", "edid_bus_matching", "language"],
+        );
         let step = r.int("general.step", general.get("step"), 5, 1, 50) as u8;
         let edid_bus_matching = r.boolean(
             "general.edid_bus_matching",
             general.get("edid_bus_matching"),
             false,
         );
+
+        let language = {
+            let raw = r.string("general.language", general.get("language"), 16);
+            let code = raw.trim().to_lowercase();
+            if code.is_empty() {
+                LANGUAGE_AUTO.to_owned()
+            } else if valid_language(&code) {
+                code
+            } else {
+                r.note(
+                    Severity::Warning,
+                    "general.language",
+                    "invalid language (expected \"auto\" or a code such as \"fr\"), \"auto\" used",
+                );
+                LANGUAGE_AUTO.to_owned()
+            }
+        };
 
         let presets = root
             .get("presets")
@@ -957,6 +999,7 @@ impl Config {
                 general: General {
                     step,
                     edid_bus_matching,
+                    language,
                 },
                 presets,
                 displays,

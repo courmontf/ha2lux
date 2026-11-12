@@ -156,6 +156,7 @@ version = 1
 [general]
 step = 5
 edid_bus_matching = false      # true: EDID fallback for NVIDIA cards
+language = "auto"              # "auto" (follow the session), "en" or "fr"
 
 [presets]
 Night = 15
@@ -221,9 +222,18 @@ git push --follow-tags           # publish it
 ## Languages
 
 The interface (CLI, icon, daemon messages, `ha2lux doctor`) is available in **English** and
-**French**. The language follows your environment (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`);
-`HA2LUX_LANG=en` or `HA2LUX_LANG=fr` forces it. Other languages fall back to English. To add a
-language, see `crates/ha2lux-i18n/src/lib.rs`. Logs are always in English.
+**French**. To choose, set `language` in `config.toml` (`[general]` section):
+
+```toml
+[general]
+language = "en"      # "auto" (default: follow the session), "en" or "fr"
+```
+
+Priority: the `HA2LUX_LANG=en|fr` environment variable (handy for a one-off test), then the
+`language` setting, then your session's language (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`).
+Other languages fall back to English. The icon reads the setting when it starts: restart it
+(`pkill -x ha2lux-tray; ha2lux-tray &`) after changing it. To add a language, see
+`crates/ha2lux-i18n/src/lib.rs`. Logs are always in English.
 
 ## Troubleshooting
 
