@@ -1,6 +1,6 @@
 # UNTESTED: RPM package skeleton (Fedora/openSUSE). Validate before any use.
 Name:           ha2lux
-Version:        0.7.0
+Version:        0.7.1
 Release:        1%{?dist}
 Summary:        Brightness control for all displays (DDC/CI, backlight)
 License:        MIT

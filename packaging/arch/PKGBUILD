@@ -1,6 +1,6 @@
 # UNTESTED: Arch Linux package skeleton. Validate on an Arch machine before any use.
 pkgname=ha2lux
-pkgver=0.7.0
+pkgver=0.7.1
 pkgrel=1
 pkgdesc="Brightness control for all displays (DDC/CI, backlight) — daemon, CLI and tray icon"
 arch=('x86_64' 'aarch64')

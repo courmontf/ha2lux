@@ -3,6 +3,13 @@
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ;
 versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [0.7.1] - 2026-11-12
+
+### Autres changements
+
+- chore(deny): retire les licences autorisées devenues inutiles (da3fb19)
+- docs: traduit en anglais les commentaires du code et des fichiers de configuration (a5af3ab)
+
 ## [0.7.0] - 2026-11-12
 
 ### Nouveautés
