@@ -1,0 +1,35 @@
+[package]
+name = "ha2lux-tray"
+description = "Icône de zone de notification ha2lux."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ha2lux-tray"
+path = "src/main.rs"
+
+[lib]
+name = "ha2lux_tray"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ha2lux-core.workspace = true
+ksni = { version = "0.3.7", features = ["tokio"] }
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync"] }
+ha2lux-ipc = { path = "../ha2lux-ipc" }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+futures-util = "0.3"
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+
+[dev-dependencies]
+ha2luxd = { path = "../ha2luxd" }
+ha2lux-backends = { path = "../ha2lux-backends" }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "process"] }

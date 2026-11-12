@@ -1,0 +1,294 @@
+//! Objet D-Bus `org.ha2lux.Daemon1` : traduit les appels en requêtes vers
+//! l'acteur décideur. **Aucune logique métier ici** : la validation et les
+//! décisions sont dans le démon, jamais dans cette couche ni chez le client.
+
+use std::collections::HashMap;
+
+use ha2lux_ipc::DaemonError;
+use zbus::zvariant::{OwnedValue, Value};
+
+use crate::actor::DaemonHandle;
+use crate::api::{Request, StatusSnapshot};
+
+/// L'objet exposé sur le bus.
+pub struct DaemonInterface {
+    handle: DaemonHandle,
+    /// Honorer `Quit` (désactivé seulement par un test simulant un démon qui ne libère pas le nom).
+    honor_quit: bool,
+}
+
+impl DaemonInterface {
+    /// Crée l'objet D-Bus au-dessus d'une poignée de l'acteur.
+    pub fn new(handle: DaemonHandle, honor_quit: bool) -> Self {
+        Self { handle, honor_quit }
+    }
+
+    async fn run(&self, request: Request) -> Result<(), DaemonError> {
+        self.handle
+            .request(request)
+            .await
+            .map(|_| ())
+            .map_err(DaemonError::from)
+    }
+}
+
+fn owned<'a>(value: impl Into<Value<'a>>) -> OwnedValue {
+    // Aucune de ces valeurs ne porte de descripteur de fichier : la conversion ne peut pas échouer.
+    value
+        .into()
+        .try_to_owned()
+        .unwrap_or_else(|_| OwnedValue::from(0u8))
+}
+
+/// Convertit l'état en dictionnaire D-Bus `a{sv}`.
+pub fn status_to_map(status: &StatusSnapshot) -> HashMap<String, OwnedValue> {
+    let mut map = HashMap::new();
+    let mut put = |key: &str, value: OwnedValue| {
+        map.insert(key.to_owned(), value);
+    };
+    put("version", owned(status.version.as_str()));
+    put("master", owned(status.master.map_or(-1, i32::from)));
+    put("mode", owned(status.mode.as_str()));
+    put("step", owned(u32::from(status.step)));
+    put("schedule_enabled", owned(status.schedule_enabled));
+    put("schedule_points", owned(status.schedule_points));
+    put(
+        "schedule_suspended",
+        owned(status.schedule_resume.is_some()),
+    );
+    if let Some(resume) = &status.schedule_resume {
+        put("schedule_resume", owned(resume.as_str()));
+    }
+    put("idle_enabled", owned(status.idle_enabled));
+    put("idle_level", owned(u32::from(status.idle_level)));
+    put("idle_minutes", owned(u32::from(status.idle_minutes)));
+    put("dimmed", owned(status.dimmed));
+    put("auto_enabled", owned(status.auto_enabled));
+    put("auto_configured", owned(status.auto_configured));
+    put("ha_health", owned(status.ha_health.as_str()));
+    put("ha_websocket", owned(status.ha_websocket));
+    put("ha_auth_rejected", owned(status.ha_auth_rejected));
+    put("ha_token_present", owned(status.ha_token_present));
+    if let Some(raw) = &status.ha_raw {
+        put("ha_raw", owned(raw.as_str()));
+    }
+    put("auto_adjusting", owned(status.auto_adjusting));
+    put("curve_default", owned(status.curve_default));
+    if let Some(lux) = status.lux_smoothed {
+        put("lux_smoothed", owned(lux));
+    }
+    if let Some(lux) = status.lux_latest {
+        put("lux_latest", owned(lux));
+    }
+    if let Some(target) = status.auto_target {
+        put("auto_target", owned(i32::from(target)));
+    }
+    let curve = status
+        .curve
+        .iter()
+        .map(|(lux, level)| format!("{lux}:{level}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    put("curve", owned(curve.as_str()));
+    put(
+        "ramp_target",
+        owned(status.ramp_target.map_or(-1, i32::from)),
+    );
+    if let Some(error) = &status.config_error {
+        put("config_error", owned(error.as_str()));
+    }
+    put(
+        "displays",
+        owned(u32::try_from(status.displays.len()).unwrap_or(u32::MAX)),
+    );
+    put("writes_ok", owned(status.writes_ok));
+    put("writes_failed", owned(status.writes_failed));
+    put("retries", owned(status.retries));
+    put("abandoned_ops", owned(status.abandoned_ops));
+    if let Some(error) = &status.last_error {
+        put("last_error", owned(error.as_str()));
+    }
+    map
+}
+
+/// Implémentation de l'interface D-Bus. Les éléments générés par la macro ne sont
+/// pas documentés un par un : les méthodes sont décrites dans `ha2lux_ipc::proxy`.
+mod interface {
+    #![allow(missing_docs)]
+
+    use std::collections::HashMap;
+
+    use ha2lux_ipc::{DaemonError, DisplayDto, OBJECT_PATH};
+    use tokio::sync::mpsc::UnboundedReceiver;
+    use zbus::object_server::SignalEmitter;
+    use zbus::zvariant::OwnedValue;
+
+    use super::{DaemonInterface, status_to_map};
+    use crate::actor::Signal;
+    use crate::api::{Reply, Request};
+
+    #[zbus::interface(name = "org.ha2lux.Daemon1")]
+    impl DaemonInterface {
+        async fn set_master(&self, level: u32) -> Result<(), DaemonError> {
+            self.run(Request::SetMaster(level)).await
+        }
+
+        async fn step_master(&self, delta: i32) -> Result<(), DaemonError> {
+            self.run(Request::StepMaster(delta)).await
+        }
+
+        async fn set_display(&self, id: String, level: u32) -> Result<(), DaemonError> {
+            self.run(Request::SetDisplay { id, level }).await
+        }
+
+        async fn set_range(&self, id: String, low: u32, high: u32) -> Result<(), DaemonError> {
+            self.run(Request::SetRange { id, low, high }).await
+        }
+
+        async fn apply_preset(&self, name: String) -> Result<(), DaemonError> {
+            self.run(Request::ApplyPreset(name)).await
+        }
+
+        async fn set_mode(&self, feature: String, on: bool) -> Result<(), DaemonError> {
+            self.run(Request::SetMode { feature, on }).await
+        }
+
+        async fn rescan(&self) -> Result<(), DaemonError> {
+            self.run(Request::Rescan).await
+        }
+
+        async fn set_ui_open(&self, open: bool) -> Result<(), DaemonError> {
+            self.run(Request::SetUiOpen(open)).await
+        }
+
+        async fn reload(&self) -> Result<(), DaemonError> {
+            self.run(Request::Reload).await
+        }
+
+        async fn reset_curve(&self) -> Result<(), DaemonError> {
+            self.run(Request::ResetCurve).await
+        }
+
+        async fn undo_learn(&self) -> Result<(), DaemonError> {
+            self.run(Request::UndoLearn).await
+        }
+
+        async fn set_token(&self, token: String) -> Result<(), DaemonError> {
+            self.run(Request::SetToken(crate::api::Secret(token))).await
+        }
+
+        async fn clear_token(&self) -> Result<(), DaemonError> {
+            self.run(Request::ClearToken).await
+        }
+
+        async fn sensors(&self) -> Result<Vec<(String, String, String)>, DaemonError> {
+            match self.handle.request(Request::ListSensors).await? {
+                Reply::Sensors(list) => Ok(list),
+                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+            }
+        }
+
+        async fn presets(&self) -> Result<Vec<(String, u32)>, DaemonError> {
+            match self.handle.request(Request::Presets).await? {
+                Reply::Presets(list) => Ok(list),
+                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+            }
+        }
+
+        async fn list(&self) -> Result<Vec<DisplayDto>, DaemonError> {
+            match self.handle.request(Request::List).await? {
+                Reply::List(list) => Ok(list),
+                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+            }
+        }
+
+        async fn status(&self) -> Result<HashMap<String, OwnedValue>, DaemonError> {
+            match self.handle.request(Request::Status).await? {
+                Reply::Status(status) => Ok(status_to_map(&status)),
+                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+            }
+        }
+
+        /// Demande l'arrêt propre (remplacement d'instance, `systemctl stop`).
+        async fn quit(&self) -> Result<(), DaemonError> {
+            if self.honor_quit {
+                self.run(Request::Quit).await
+            } else {
+                Ok(())
+            }
+        }
+
+        #[zbus(property)]
+        async fn master(&self) -> i32 {
+            self.handle.snapshot().master.map_or(-1, i32::from)
+        }
+
+        #[zbus(property)]
+        async fn mode(&self) -> String {
+            self.handle.snapshot().mode.clone()
+        }
+
+        #[zbus(signal)]
+        async fn level_changed(emitter: &SignalEmitter<'_>, master: u32) -> zbus::Result<()>;
+
+        #[zbus(signal)]
+        async fn displays_changed(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
+
+        /// Nom D-Bus `ModeChanged` ; renommé en Rust pour ne pas entrer en conflit avec
+        /// l'assistant de changement de la propriété `Mode`.
+        #[zbus(signal, name = "ModeChanged")]
+        async fn mode_switched(emitter: &SignalEmitter<'_>, mode: &str) -> zbus::Result<()>;
+
+        #[zbus(signal)]
+        async fn display_failed(
+            emitter: &SignalEmitter<'_>,
+            id: &str,
+            reason: &str,
+        ) -> zbus::Result<()>;
+    }
+
+    /// Émet sur le bus les signaux produits par l'acteur, jusqu'à la fermeture du canal.
+    pub async fn pump_signals(
+        connection: zbus::Connection,
+        mut signals: UnboundedReceiver<Signal>,
+    ) {
+        let Ok(iface) = connection
+            .object_server()
+            .interface::<_, DaemonInterface>(OBJECT_PATH)
+            .await
+        else {
+            tracing::error!("objet D-Bus introuvable : signaux désactivés");
+            return;
+        };
+        while let Some(signal) = signals.recv().await {
+            let emitter = iface.signal_emitter();
+            let result = match signal {
+                Signal::LevelChanged(master) => {
+                    let sent = DaemonInterface::level_changed(emitter, u32::from(master)).await;
+                    if sent.is_ok() {
+                        iface.get().await.master_changed(emitter).await
+                    } else {
+                        sent
+                    }
+                }
+                Signal::DisplaysChanged => DaemonInterface::displays_changed(emitter).await,
+                Signal::ModeChanged(mode) => {
+                    let sent = DaemonInterface::mode_switched(emitter, &mode).await;
+                    if sent.is_ok() {
+                        iface.get().await.mode_changed(emitter).await
+                    } else {
+                        sent
+                    }
+                }
+                Signal::DisplayFailed { id, reason } => {
+                    DaemonInterface::display_failed(emitter, &id, &reason).await
+                }
+            };
+            if let Err(error) = result {
+                tracing::debug!(%error, "signal D-Bus non émis");
+            }
+        }
+    }
+}
+
+pub use interface::pump_signals;

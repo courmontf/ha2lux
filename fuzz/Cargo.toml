@@ -1,0 +1,46 @@
+[package]
+name = "ha2lux-fuzz"
+version = "0.0.0"
+license = "MIT"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ha2lux-core = { path = "../crates/ha2lux-core" }
+ha2lux-ha = { path = "../crates/ha2lux-ha" }
+
+[[bin]]
+name = "url"
+path = "fuzz_targets/url.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "edid"
+path = "fuzz_targets/edid.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "config"
+path = "fuzz_targets/config.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ddc"
+path = "fuzz_targets/ddc.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "ha_state"
+path = "fuzz_targets/ha_state.rs"
+test = false
+doc = false

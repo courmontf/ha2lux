@@ -1,0 +1,110 @@
+//! Binaire `ha2luxd` : démon utilisateur ha2lux.
+//!
+//! Il remplace proprement une instance déjà en cours (voir `service`), écoute
+//! sur le bus de session et s'arrête sur SIGTERM/SIGINT ou sur `Quit`.
+#![forbid(unsafe_code)]
+
+use std::process::ExitCode;
+use std::sync::Arc;
+
+use ha2luxd::clock::SystemClock;
+use ha2luxd::ha::{HaDeps, RealSources, SecretTokens};
+use ha2luxd::hardware::SystemHardware;
+use ha2luxd::paths::Paths;
+use ha2luxd::service::{ServiceOptions, run};
+use tracing_subscriber::EnvFilter;
+
+const USAGE: &str = "usage : ha2luxd [--help | --version]
+
+Démon utilisateur ha2lux : règle la luminosité des écrans (DDC/CI et backlight).
+Il remplace une instance déjà en cours, puis sert l'interface D-Bus org.ha2lux.Daemon1
+sur le bus de session. Niveau de journalisation : variable RUST_LOG (défaut : info).
+
+codes de sortie : 0 arrêt normal, 1 usage, 3 démarrage impossible";
+
+fn init_logging() {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let builder = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr);
+    // Sous systemd, journald ajoute lui-même l'horodatage et n'aime pas les couleurs.
+    if std::env::var_os("JOURNAL_STREAM").is_some() {
+        builder.without_time().with_ansi(false).init();
+    } else {
+        builder.init();
+    }
+}
+
+async fn shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+    let (Ok(mut term), Ok(mut int)) = (
+        signal(SignalKind::terminate()),
+        signal(SignalKind::interrupt()),
+    ) else {
+        // Sans gestionnaire de signaux, on attend indéfiniment : l'arrêt passera par `Quit`.
+        std::future::pending::<()>().await;
+        return;
+    };
+    tokio::select! {
+        _ = term.recv() => {}
+        _ = int.recv() => {}
+    }
+}
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        None => {}
+        Some("--help" | "-h") => {
+            println!("{USAGE}");
+            return ExitCode::SUCCESS;
+        }
+        Some("--version" | "-V") => {
+            println!("ha2luxd {}", env!("CARGO_PKG_VERSION"));
+            return ExitCode::SUCCESS;
+        }
+        Some(other) => {
+            eprintln!("argument inattendu : {other}\n{USAGE}");
+            return ExitCode::from(1);
+        }
+    }
+    init_logging();
+    let paths = match Paths::system() {
+        Ok(paths) => paths,
+        Err(error) => {
+            eprintln!("erreur : {error}");
+            return ExitCode::from(3);
+        }
+    };
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), config = %paths.config_file.display(), "démarrage");
+    let keyring = match ha2lux_secrets::ServiceSecretStore::connect_session().await {
+        Ok(store) => Some(store),
+        Err(error) => {
+            tracing::info!(%error, "pas de trousseau : repli sur le fichier de secrets");
+            None
+        }
+    };
+    let store = ha2lux_secrets::ChainStore::new(
+        keyring,
+        ha2lux_secrets::FileSecretStore::new(paths.secrets_file.clone()),
+    );
+    let ha = HaDeps {
+        tokens: Arc::new(SecretTokens(Arc::new(store))),
+        sources: Arc::new(RealSources),
+    };
+    let mut options = ServiceOptions::production(
+        paths,
+        Arc::new(SystemHardware::new()),
+        Arc::new(SystemClock::new()),
+    );
+    options.ha = Some(ha);
+    match run(options, shutdown_signal()).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!(%error, "arrêt sur erreur");
+            eprintln!("erreur : {error}");
+            ExitCode::from(3)
+        }
+    }
+}

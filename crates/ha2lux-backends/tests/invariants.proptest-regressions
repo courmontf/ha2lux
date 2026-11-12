@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2e68ab42c09170ac484d477db27fe9c095b3be42f2c99658e3d0ee10fe57835a # shrinks to actions = [Respond(false, false), SetRange(false, 0, 0)]
+cc 04474a2a8d2da5a2c6723bb49acf1250ff2c93aa8c234aa4931a01a2521a20e0 # shrinks to actions = [Ha(Offline), Lux(0.0), Ha(Ok), SetMaster(0)]
+cc 87bfa36b569f0bfc308471242bf103dc231df0a7dfb975c7f185b24ce523724a # shrinks to actions = [Advance(126900), Advance(192651), Advance(185475), Ha(Ok), SetMaster(0), Advance(34974)]

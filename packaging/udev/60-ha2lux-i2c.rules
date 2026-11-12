@@ -1,0 +1,13 @@
+# ha2lux : accès des bus DDC/CI (/dev/i2c-*) à l'utilisateur de la session active.
+#
+# À installer VOUS-MÊME (ha2lux ne modifie jamais /etc) :
+#   sudo install -m 0644 packaging/udev/60-ha2lux-i2c.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload
+#   sudo udevadm trigger --subsystem-match=i2c-dev
+#
+# « uaccess » donne une ACL à l'utilisateur de la session graphique active (pas de
+# groupe à gérer). Le numéro 60 est inférieur à 73 (73-seat-late.rules), condition
+# pour que le tag soit pris en compte. Alternative sans uaccess : un groupe « i2c »
+#   KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"
+# puis `sudo usermod -aG i2c "$USER"` et une reconnexion.
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", TAG+="uaccess"

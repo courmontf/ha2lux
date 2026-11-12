@@ -1,0 +1,66 @@
+[package]
+name = "ha2luxd"
+description = "Démon utilisateur ha2lux."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "ha2luxd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ha2luxd"
+path = "src/main.rs"
+
+[dependencies]
+ha2lux-core.workspace = true
+ha2lux-backends = { path = "../ha2lux-backends" }
+ha2lux-ipc = { path = "../ha2lux-ipc" }
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "signal", "fs", "process"] }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+futures-util = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+netlink-sys = { version = "0.9.0", features = ["tokio_socket"] }
+wayland-client = "0.31.15"
+wayland-protocols = { version = "0.32.12", features = ["client", "staging"] }
+rustix = { version = "1.1.6", features = ["event", "fs"] }
+serde_json = "1.0.154"
+ha2lux-ha = { version = "0.1.0", path = "../ha2lux-ha" }
+ha2lux-secrets = { version = "0.1.0", path = "../ha2lux-secrets" }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "test-util", "process", "io-util"] }
+proptest.workspace = true
+wayland-server = "0.31.14"
+wayland-protocols = { version = "0.32.12", features = ["server", "staging"] }
+
+[lints]
+workspace = true
+
+[package.metadata.deb]
+name = "ha2lux"
+maintainer = "à renseigner"
+copyright = "2026, courmontf"
+section = "utils"
+priority = "optional"
+depends = "$auto, dbus"
+recommends = "i2c-tools"
+extended-description = "Démon utilisateur, CLI et icône qui règlent la luminosité de tous les écrans (DDC/CI, backlight)."
+assets = [
+  ["../../target/release/ha2luxd", "usr/bin/", "755"],
+  ["../../target/release/ha2lux", "usr/bin/", "755"],
+  ["../../target/release/ha2lux-tray", "usr/bin/", "755"],
+  ["../../LICENSE", "usr/share/doc/ha2lux/", "644"],
+  ["../../packaging/systemd/ha2luxd.service", "usr/lib/systemd/user/", "644"],
+  ["../../packaging/dbus/org.ha2lux.Daemon.service", "usr/share/dbus-1/services/", "644"],
+  ["../../packaging/udev/60-ha2lux-i2c.rules", "usr/lib/udev/rules.d/", "644"],
+  ["../../packaging/modules-load.d/ha2lux-i2c-dev.conf", "usr/lib/modules-load.d/", "644"],
+  ["../../packaging/xdg/autostart/ha2lux-tray.desktop", "etc/xdg/autostart/", "644"],
+]

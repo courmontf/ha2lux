@@ -1,0 +1,36 @@
+# Politique cargo-deny (format cargo-deny >= 0.18).
+[advisories]
+yanked = "deny"
+# Avis « non maintenu » (pas des vulnérabilités) : la famille zvariant/zbus_names a été fusionnée
+# dans `zbus` ; ces crates ne reçoivent plus de mises à jour et aucune version de remplacement
+# n'est publiée pour zbus 5. À réévaluer à la prochaine montée de version de zbus et de ksni.
+ignore = ["RUSTSEC-2026-0370", "RUSTSEC-2026-0371", "RUSTSEC-2026-0372"]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+    # Certificats racine Mozilla (webpki-root-certs, tirée par rustls-platform-verifier).
+    "CDLA-Permissive-2.0",
+    # ksni (icône de zone de notification) : domaine public.
+    "Unlicense",
+]
+confidence-threshold = 0.8
+# Les crates du workspace sont sous licence MIT (publish = false : jamais publiées sur crates.io).
+private = { ignore = true }
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
