@@ -42,7 +42,7 @@
 pub mod config;
 pub mod wire;
 
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 pub use fluent_bundle::FluentArgs;
 use fluent_bundle::concurrent::FluentBundle;
@@ -146,14 +146,34 @@ pub fn detect_with(preferred: Option<&str>, var: impl Fn(&str) -> Option<String>
     FALLBACK_LANG
 }
 
-/// Langue demandée par le fichier de configuration, fixée avant la première traduction.
-static PREFERRED: OnceLock<String> = OnceLock::new();
+/// Langue du processus : celle du fichier de configuration (`preferred`) et le
+/// localisateur qui en résulte, construit au premier besoin.
+struct Language {
+    preferred: Option<String>,
+    current: Option<Arc<Localizer>>,
+}
 
-/// Fixe la langue du fichier de configuration. À appeler au tout début de `main`,
-/// avant tout texte affiché ; sans effet (renvoie `false`) si une traduction a déjà
-/// eu lieu ou si elle est déjà fixée.
+static LANGUAGE: Mutex<Language> = Mutex::new(Language {
+    preferred: None,
+    current: None,
+});
+
+fn language() -> MutexGuard<'static, Language> {
+    // Un verrou empoisonné ne rend pas les données invalides : on continue.
+    LANGUAGE.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Fixe la langue du fichier de configuration (`auto` : celle de la session).
+/// Peut être rappelée à tout moment (rechargement de la configuration) : les
+/// prochains textes sont alors traduits dans la nouvelle langue. Renvoie `true` si
+/// la langue effective a changé.
 pub fn set_preferred(lang: &str) -> bool {
-    CURRENT.get().is_none() && PREFERRED.set(lang.to_owned()).is_ok()
+    let before = current().lang();
+    let mut state = language();
+    state.preferred = Some(lang.to_owned());
+    state.current = None;
+    drop(state);
+    current().lang() != before
 }
 
 /// Les messages d'une langue, avec repli sur [`FALLBACK_LANG`].
@@ -233,25 +253,26 @@ impl Localizer {
     }
 }
 
-static CURRENT: OnceLock<Localizer> = OnceLock::new();
-
-/// Le localisateur du processus, initialisé au premier appel d'après l'environnement.
-pub fn current() -> &'static Localizer {
-    CURRENT.get_or_init(|| {
-        let lang = detect_with(PREFERRED.get().map(String::as_str), |name| {
-            std::env::var(name).ok()
-        });
-        match Localizer::try_new(lang) {
-            Ok(localizer) => localizer,
-            // Catalogue embarqué invalide : impossible en pratique (testé).
-            // On reste utilisable : les clés s'affichent telles quelles.
-            Err(_) => Localizer {
-                lang: FALLBACK_LANG,
-                primary: FluentBundle::new_concurrent(Vec::new()),
-                fallback: None,
-            },
-        }
-    })
+/// Le localisateur du processus, construit au premier appel d'après la configuration
+/// puis l'environnement. Le résultat reste valable même si la langue change ensuite.
+pub fn current() -> Arc<Localizer> {
+    let mut state = language();
+    if let Some(localizer) = &state.current {
+        return Arc::clone(localizer);
+    }
+    let lang = detect_with(state.preferred.as_deref(), |name| std::env::var(name).ok());
+    let localizer = Arc::new(match Localizer::try_new(lang) {
+        Ok(localizer) => localizer,
+        // Catalogue embarqué invalide : impossible en pratique (testé).
+        // On reste utilisable : les clés s'affichent telles quelles.
+        Err(_) => Localizer {
+            lang: FALLBACK_LANG,
+            primary: FluentBundle::new_concurrent(Vec::new()),
+            fallback: None,
+        },
+    });
+    state.current = Some(Arc::clone(&localizer));
+    localizer
 }
 
 /// Traduit `key` dans la langue du processus (voir aussi la macro [`t!`]).

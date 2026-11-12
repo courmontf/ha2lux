@@ -310,6 +310,13 @@ async fn run_action(proxy: &DaemonProxy<'_>, config_file: &std::path::Path, acti
             }
             Ok(())
         }
+        Action::ReloadConfig => {
+            let result = proxy.reload().await;
+            // La langue est relue même si le démon refuse (fichier invalide : il garde
+            // l'ancienne configuration, et `apply_file` ignore un fichier mal formé).
+            ha2lux_i18n::config::apply_file(config_file);
+            result
+        }
         Action::MenuOpened | Action::Quit => Ok(()),
     };
     if let Err(error) = result {

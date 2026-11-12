@@ -147,7 +147,7 @@ votre bureau.
 ### Icône de zone de notification
 
 Menu : niveau courant, « Tous les écrans » et un sous-menu par écran (niveaux de 10 en 10 %),
-presets, auto-luminosité / planning / atténuation, re-scan, réglages (ouvre `config.toml`), à propos (versions de l'icône et du démon),
+presets, auto-luminosité / planning / atténuation, re-scan, réglages (ouvre `config.toml`), recharger la configuration, à propos (versions de l'icône et du démon),
 quitter. **Molette** sur l'icône : ± un pas (les crans rapides sont regroupés) avec une notification
 de progression. Il n'y a pas de popup à glisseurs (écart documenté : `specs/DECISIONS.md` n° 84).
 
@@ -237,8 +237,9 @@ language = "fr"      # "auto" (par défaut : suit la session), "en" ou "fr"
 
 Priorité : la variable d'environnement `HA2LUX_LANG=en|fr` (pratique pour un essai ponctuel),
 puis le réglage `language`, puis la langue de votre session (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`,
-`LANG`). Les autres langues retombent sur l'anglais. L'icône lit le réglage à son démarrage :
-relancez-la (`pkill -x ha2lux-tray; ha2lux-tray &`) après l'avoir changé. Ajouter une langue :
+`LANG`). Les autres langues retombent sur l'anglais. Après l'avoir changé, choisissez
+**Recharger la configuration** dans le menu de l'icône : le démon et l'icône changent de langue
+aussitôt, sans redémarrage (`ha2lux reload` ne recharge que le démon). Ajouter une langue :
 voir `crates/ha2lux-i18n/src/lib.rs`. Les journaux restent en anglais.
 
 ## Dépannage

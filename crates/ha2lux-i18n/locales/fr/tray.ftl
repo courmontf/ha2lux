@@ -24,6 +24,7 @@ tray-schedule-resume = Planning suspendu jusqu'à { $resume }
 tray-idle-dim = Atténuation à l'inactivité ({ $level } % après { $minutes } min)
 tray-rescan = Re-scanner les écrans
 tray-settings = Réglages…
+tray-reload = Recharger la configuration
 tray-about = À propos
 tray-about-tray = Icône ha2lux-tray { $version }
 tray-about-daemon = Démon ha2luxd { $version }

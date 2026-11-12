@@ -36,15 +36,23 @@ pub fn language_in(text: &str) -> Option<String> {
 /// Lit `config.toml` et fixe la langue demandée (voir [`crate::set_preferred`]).
 /// À appeler au début de `main`, avant d'afficher quoi que ce soit.
 pub fn init_from_config() {
-    let Some(path) = config_file(|name| std::env::var(name).ok()) else {
-        return;
-    };
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return;
-    };
-    if let Some(language) = language_in(&text) {
-        crate::set_preferred(&language);
+    if let Some(path) = config_file(|name| std::env::var(name).ok()) {
+        apply_file(&path);
     }
+}
+
+/// Relit `path` et applique sa langue. Un fichier absent, illisible ou mal formé ne change rien ;
+/// `auto` ou l'absence de clé redonnent la langue de la session. Renvoie `true` si la
+/// langue effective a changé.
+pub fn apply_file(path: &Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    // Fichier mal formé : on garde la langue actuelle plutôt que de la perdre.
+    let Ok(parsed) = Config::parse(&text) else {
+        return false;
+    };
+    crate::set_preferred(&parsed.config.general.language)
 }
 
 #[cfg(test)]

@@ -215,6 +215,19 @@ fn about_handles_an_unknown_daemon_version() {
 }
 
 #[test]
+fn menu_offers_to_reload_the_configuration() {
+    let menu = build_menu(&state());
+    let Entry::Item {
+        action, enabled, ..
+    } = find(&menu, "Recharger la configuration")
+    else {
+        panic!("entrée de rechargement attendue");
+    };
+    assert!(*enabled);
+    assert_eq!(action, &Some(Action::ReloadConfig));
+}
+
+#[test]
 fn unreachable_daemon_reduces_the_menu_to_a_message_and_quit() {
     let s = TrayState::default();
     let menu = build_menu(&s);

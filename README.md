@@ -141,7 +141,7 @@ On Wayland an application cannot capture global keys: bind them to the CLI in yo
 ### Notification-area icon
 
 Menu: current level, "All displays" and a submenu per display (levels in 10% steps), presets,
-auto-brightness / schedule / idle dimming, rescan, settings (opens `config.toml`), About (tray and daemon versions), quit.
+auto-brightness / schedule / idle dimming, rescan, settings (opens `config.toml`), reload configuration, About (tray and daemon versions), quit.
 **Mouse wheel** on the icon: ± one step (fast notches are merged) with a progress notification.
 There is no slider popup (documented deviation: `specs/DECISIONS.md` no. 84).
 
@@ -231,8 +231,9 @@ language = "en"      # "auto" (default: follow the session), "en" or "fr"
 
 Priority: the `HA2LUX_LANG=en|fr` environment variable (handy for a one-off test), then the
 `language` setting, then your session's language (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`).
-Other languages fall back to English. The icon reads the setting when it starts: restart it
-(`pkill -x ha2lux-tray; ha2lux-tray &`) after changing it. To add a language, see
+Other languages fall back to English. After changing it, choose
+**Reload configuration** in the icon's menu: the daemon and the icon switch language at once,
+without restarting (`ha2lux reload` only reloads the daemon). To add a language, see
 `crates/ha2lux-i18n/src/lib.rs`. Logs are always in English.
 
 ## Troubleshooting

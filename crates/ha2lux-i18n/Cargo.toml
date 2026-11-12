@@ -12,5 +12,8 @@ ha2lux-core.workspace = true
 fluent-bundle = "0.16"
 unic-langid = "0.9"
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

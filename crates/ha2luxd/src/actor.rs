@@ -1282,6 +1282,8 @@ impl Actor {
         for issue in &loaded.issues {
             tracing::warn!(key = %issue.path, "configuration: {}", issue.message);
         }
+        // Les messages du démon suivent aussi la langue du fichier rechargé.
+        ha2lux_i18n::set_preferred(&loaded.config.general.language);
         self.config = loaded.config;
         self.config_error = None;
         for entry in &self.config.displays {

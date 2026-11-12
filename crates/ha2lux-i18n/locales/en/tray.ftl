@@ -24,6 +24,7 @@ tray-schedule-resume = Schedule paused until { $resume }
 tray-idle-dim = Dim when idle ({ $level }% after { $minutes } min)
 tray-rescan = Rescan displays
 tray-settings = Settings…
+tray-reload = Reload configuration
 tray-about = About
 tray-about-tray = Tray icon ha2lux-tray { $version }
 tray-about-daemon = Daemon ha2luxd { $version }

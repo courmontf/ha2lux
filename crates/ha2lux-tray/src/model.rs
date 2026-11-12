@@ -112,6 +112,8 @@ pub enum Action {
     Rescan,
     /// Ouvre le fichier de configuration.
     OpenSettings,
+    /// Fait relire la configuration au démon, puis la langue à l'icône.
+    ReloadConfig,
     /// Le menu s'ouvre (les relances des écrans en attente sont reportées).
     MenuOpened,
     /// Quitte l'icône (pas le démon).
@@ -328,6 +330,7 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
     menu.push(Entry::Separator);
     menu.push(item(t!("tray-rescan"), Action::Rescan));
     menu.push(item(t!("tray-settings"), Action::OpenSettings));
+    menu.push(item(t!("tray-reload"), Action::ReloadConfig));
     menu.push(about(state));
     menu.push(item(t!("tray-quit"), Action::Quit));
     menu
