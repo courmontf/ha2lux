@@ -1,6 +1,6 @@
 # NON TESTÉ : squelette de paquet RPM (Fedora/openSUSE). À valider avant tout usage.
 Name:           ha2lux
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Réglage de la luminosité de tous les écrans (DDC/CI, backlight)
 License:        MIT
