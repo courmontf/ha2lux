@@ -7,20 +7,13 @@
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use ha2lux_i18n::t;
 use ha2luxd::clock::SystemClock;
 use ha2luxd::ha::{HaDeps, RealSources, SecretTokens};
 use ha2luxd::hardware::SystemHardware;
 use ha2luxd::paths::Paths;
 use ha2luxd::service::{ServiceOptions, run};
 use tracing_subscriber::EnvFilter;
-
-const USAGE: &str = "usage : ha2luxd [--help | --version]
-
-Démon utilisateur ha2lux : règle la luminosité des écrans (DDC/CI et backlight).
-Il remplace une instance déjà en cours, puis sert l'interface D-Bus org.ha2lux.Daemon1
-sur le bus de session. Niveau de journalisation : variable RUST_LOG (défaut : info).
-
-codes de sortie : 0 arrêt normal, 1 usage, 3 démarrage impossible";
 
 fn init_logging() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -57,7 +50,7 @@ async fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         None => {}
         Some("--help" | "-h") => {
-            println!("{USAGE}");
+            println!("{}", t!("daemon-usage"));
             return ExitCode::SUCCESS;
         }
         Some("--version" | "-V") => {
@@ -65,7 +58,11 @@ async fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Some(other) => {
-            eprintln!("argument inattendu : {other}\n{USAGE}");
+            eprintln!(
+                "{}\n{}",
+                t!("daemon-unexpected-argument", arg = other),
+                t!("daemon-usage")
+            );
             return ExitCode::from(1);
         }
     }
@@ -73,7 +70,7 @@ async fn main() -> ExitCode {
     let paths = match Paths::system() {
         Ok(paths) => paths,
         Err(error) => {
-            eprintln!("erreur : {error}");
+            eprintln!("{}", t!("daemon-error", error = error.to_string()));
             return ExitCode::from(3);
         }
     };
@@ -103,7 +100,7 @@ async fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "arrêt sur erreur");
-            eprintln!("erreur : {error}");
+            eprintln!("{}", t!("daemon-error", error = error.to_string()));
             ExitCode::from(3)
         }
     }

@@ -282,9 +282,9 @@ pub enum Command {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ControlError {
     /// Valeur hors bornes.
-    #[error("{what} hors bornes : {value}")]
+    #[error("valeur hors bornes ({what}) : {value}")]
     OutOfRange {
-        /// Grandeur concernée.
+        /// Grandeur concernée : `master-level`, `display-level`, `step` ou `preset-level`.
         what: &'static str,
         /// Valeur reçue.
         value: i64,
@@ -518,7 +518,7 @@ impl Controller {
         let mut out = Vec::new();
         match event {
             Event::SetMaster(m) => {
-                let m = percent("niveau maître", m)?;
+                let m = percent("master-level", m)?;
                 self.require_controllable()?;
                 self.manual_policy(now, m, ManualKind::Normal, &mut out);
                 self.apply_master(m, false, &mut out);
@@ -526,7 +526,7 @@ impl Controller {
             Event::Step(delta) => {
                 if !(-100..=100).contains(&delta) {
                     return Err(ControlError::OutOfRange {
-                        what: "pas",
+                        what: "step",
                         value: delta,
                     });
                 }
@@ -537,7 +537,7 @@ impl Controller {
                 self.apply_master(m, false, &mut out);
             }
             Event::Preset(level) => {
-                let m = percent("preset", level)?;
+                let m = percent("preset-level", level)?;
                 self.require_controllable()?;
                 self.manual_policy(now, m, ManualKind::Preset, &mut out);
                 self.apply_master(m, false, &mut out);
@@ -786,7 +786,7 @@ impl Controller {
         level: i64,
         out: &mut Vec<Command>,
     ) -> Result<(), ControlError> {
-        let level = percent("niveau écran", level)?;
+        let level = percent("display-level", level)?;
         match self.displays.get(&display).map(|d| d.state) {
             None => return Err(ControlError::UnknownDisplay(display)),
             Some(DisplayState::Controllable) => {}

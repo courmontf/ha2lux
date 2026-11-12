@@ -22,6 +22,7 @@ use ha2lux_core::{
     Event, Feature, InitialState, Listed, Notice, Persist, Range, RescanAction, RescanConfig,
     RescanManager, RescanTrigger, ScanOutcome, ScheduleError, State,
 };
+use ha2lux_i18n::wire;
 use ha2lux_ipc::{DisplayDto, FEATURE_AUTO, FEATURE_IDLE_DIM, FEATURE_SCHEDULE};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, watch};
@@ -1062,9 +1063,10 @@ impl Actor {
     /// Requêtes qui touchent au jeton ou au réseau : traitées hors de l'acteur, réponse différée.
     fn on_token_request(&self, request: Request, reply: oneshot::Sender<Result<Reply, ApiError>>) {
         let (Some(ha), Some(key)) = (self.deps.ha.clone(), self.token_key()) else {
-            let _ = reply.send(Err(ApiError::NotConfigured(
-                "aucune URL Home Assistant valide dans la configuration ([auto] url)".to_owned(),
-            )));
+            let _ = reply.send(Err(ApiError::NotConfigured(wire::encode(
+                "err-no-ha-url",
+                &[],
+            ))));
             return;
         };
         let (tx, url) = (self.tx.clone(), self.config.auto.url.clone());
@@ -1073,7 +1075,7 @@ impl Actor {
             let result = match request {
                 Request::SetToken(Secret(token)) => {
                     if token.trim().is_empty() {
-                        Err(ApiError::InvalidArgs("jeton vide".to_owned()))
+                        Err(ApiError::InvalidArgs(wire::encode("err-token-empty", &[])))
                     } else {
                         ha.tokens
                             .set(&key, token.trim())
@@ -1101,9 +1103,7 @@ impl Actor {
                             )
                         })
                         .map_err(ApiError::Failed),
-                    Ok(None) => Err(ApiError::NotConfigured(
-                        "aucun jeton enregistré pour cette adresse (ha2lux auto token)".to_owned(),
-                    )),
+                    Ok(None) => Err(ApiError::NotConfigured(wire::encode("err-no-token", &[]))),
                     Err(error) => Err(ApiError::Failed(error)),
                 },
             };
@@ -1119,27 +1119,29 @@ impl Actor {
     fn on_request(&mut self, request: Request) -> Result<Reply, ApiError> {
         match request {
             Request::SetMaster(level) => {
-                let level = api::percent("niveau maître", level)?;
+                let level = api::percent("master-level", level)?;
                 self.dispatch(Event::SetMaster(level))?;
             }
             Request::StepMaster(delta) => {
                 if delta == 0 || delta.unsigned_abs() > 100 {
-                    return Err(ApiError::OutOfRange(format!(
-                        "pas hors bornes : {delta} (attendu 1 à 100, positif ou négatif)"
+                    return Err(ApiError::OutOfRange(wire::encode(
+                        "err-step-out-of-range",
+                        &[("delta", &delta)],
                     )));
                 }
                 self.dispatch(Event::Step(i64::from(delta)))?;
             }
             Request::SetDisplay { id, level } => {
                 let display = api::display_id(&id)?;
-                let level = api::percent("niveau écran", level)?;
+                let level = api::percent("display-level", level)?;
                 self.dispatch(Event::SetDisplay { display, level })?;
             }
             Request::SetRange { id, low, high } => {
                 let display = api::display_id(&id)?;
                 if low > 100 || high > 100 {
-                    return Err(ApiError::OutOfRange(format!(
-                        "plage hors bornes : ({low}, {high}) (attendu 0 à 100)"
+                    return Err(ApiError::OutOfRange(wire::encode(
+                        "err-range-out-of-range",
+                        &[("low", &low), ("high", &high)],
                     )));
                 }
                 self.dispatch(Event::SetRange {
@@ -1158,9 +1160,9 @@ impl Actor {
                         .iter()
                         .map(|p| format!("{}={}", p.name, p.level))
                         .collect();
-                    return Err(ApiError::UnknownPreset(format!(
-                        "preset inconnu : {name} ; disponibles : {}",
-                        available.join(", ")
+                    return Err(ApiError::UnknownPreset(wire::encode(
+                        "err-unknown-preset",
+                        &[("name", &name), ("available", &available.join(", "))],
                     )));
                 };
                 self.dispatch(Event::Preset(i64::from(level)))?;
@@ -1237,16 +1239,22 @@ impl Actor {
             FEATURE_IDLE_DIM => Feature::IdleDim,
             FEATURE_AUTO => Feature::Auto,
             other => {
-                return Err(ApiError::InvalidArgs(format!(
-                    "fonction inconnue : {other} (attendu : {FEATURE_SCHEDULE}, {FEATURE_IDLE_DIM} ou {FEATURE_AUTO})"
+                return Err(ApiError::InvalidArgs(wire::encode(
+                    "err-unknown-feature",
+                    &[
+                        ("feature", &other),
+                        ("first", &FEATURE_SCHEDULE),
+                        ("second", &FEATURE_IDLE_DIM),
+                        ("third", &FEATURE_AUTO),
+                    ],
                 )));
             }
         };
         if feature == Feature::Auto && on && !self.auto_configured() {
-            return Err(ApiError::NotConfigured(
-                "l'auto-luminosité exige l'URL de Home Assistant, l'entité du capteur et un jeton"
-                    .to_owned(),
-            ));
+            return Err(ApiError::NotConfigured(wire::encode(
+                "err-auto-needs-config",
+                &[],
+            )));
         }
         self.dispatch(Event::Feature(feature, on))?;
         match feature {

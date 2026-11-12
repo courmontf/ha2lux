@@ -223,6 +223,8 @@ async fn presets_are_case_insensitive_and_errors_list_the_choices() {
     else {
         panic!("erreur attendue : preset inconnu");
     };
+    // Le démon envoie une clé + arguments ; le client la traduit.
+    let message = ha2lux_i18n::wire::localize(&message);
     for expected in ["Night=30", "Day=80", "Presentation=100"] {
         assert!(message.contains(expected), "{message}");
     }

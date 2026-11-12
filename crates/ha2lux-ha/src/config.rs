@@ -68,6 +68,19 @@ pub enum ConfigError {
     NoToken,
 }
 
+impl ConfigError {
+    /// Message localisable pour un client (clé de catalogue + arguments) ; voir
+    /// [`ha2lux_i18n::wire`]. Le `Display` reste le texte pour les journaux.
+    pub fn to_wire(&self) -> String {
+        use ha2lux_i18n::wire::encode;
+        match self {
+            Self::Url(error) => encode("err-ha-config-url", &[("detail", error)]),
+            Self::Entity => encode("err-ha-config-entity", &[]),
+            Self::NoToken => encode("err-ha-config-no-token", &[]),
+        }
+    }
+}
+
 /// Paramètres de connexion à Home Assistant.
 #[derive(Clone)]
 pub struct HaConfig {

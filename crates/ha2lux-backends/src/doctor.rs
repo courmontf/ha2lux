@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use ha2lux_core::DisplayBackend;
 use ha2lux_core::hw::level_from_raw;
+use ha2lux_i18n::t;
 use serde::Serialize;
 
 use crate::backlight;
@@ -168,7 +169,7 @@ impl Report {
 
     /// Rendu texte pour le terminal.
     pub fn render_text(&self) -> String {
-        let mut out = String::from("ha2lux doctor\n\n");
+        let mut out = t!("doctor-title") + "\n\n";
         for check in &self.checks {
             let tag = match check.status {
                 Status::Ok => " OK ",
@@ -176,7 +177,13 @@ impl Report {
                 Status::Warn => "WARN",
                 Status::Fail => "FAIL",
             };
-            out.push_str(&format!("[{tag}] {} : {}\n", check.id, check.summary));
+            out.push_str(&t!(
+                "doctor-check-line",
+                tag = tag,
+                id = check.id.as_str(),
+                summary = check.summary.as_str()
+            ));
+            out.push('\n');
             if let Some(hint) = &check.hint {
                 for line in hint.lines() {
                     out.push_str(&format!("       → {line}\n"));
@@ -184,33 +191,56 @@ impl Report {
             }
         }
         if !self.connectors.is_empty() {
-            out.push_str("\nConnecteurs DRM\n");
+            out.push('\n');
+            out.push_str(&t!("doctor-heading-connectors"));
+            out.push('\n');
             for c in &self.connectors {
-                let kind = if c.internal { "interne" } else { "externe" };
-                let state = if c.connected { "connecté" } else { "libre" };
-                let bus = c.ddc_bus.map_or("pas de bus DDC".to_owned(), |b| {
-                    let access = match c.bus_access {
-                        Some(true) => "accès ok",
-                        Some(false) => "accès refusé",
-                        None => "?",
-                    };
-                    format!("i2c-{b} ({access})")
-                });
-                out.push_str(&format!("  {} : {state}, {kind}, {bus}\n", c.name));
+                let kind = if c.internal {
+                    t!("doctor-kind-internal")
+                } else {
+                    t!("doctor-kind-external")
+                };
+                let state = if c.connected {
+                    t!("doctor-state-connected")
+                } else {
+                    t!("doctor-state-free")
+                };
+                let bus = c.ddc_bus.map_or_else(
+                    || t!("doctor-bus-none"),
+                    |b| {
+                        let access = match c.bus_access {
+                            Some(true) => t!("doctor-access-ok"),
+                            Some(false) => t!("doctor-access-denied"),
+                            None => "?".to_owned(),
+                        };
+                        t!("doctor-bus-with-access", bus = b, access = access)
+                    },
+                );
+                out.push_str("  ");
+                out.push_str(&t!(
+                    "doctor-connector-line",
+                    name = c.name.as_str(),
+                    state = state,
+                    kind = kind,
+                    bus = bus
+                ));
+                out.push('\n');
                 if let Some(e) = &c.edid {
-                    out.push_str(&format!(
-                        "      EDID : {} {:04X} série {} « {} » → id {}{}\n",
-                        e.manufacturer,
-                        e.product,
-                        e.serial,
-                        e.name.as_deref().unwrap_or("?"),
-                        e.id,
-                        if e.checksum_ok {
-                            ""
-                        } else {
-                            " (somme de contrôle fausse)"
-                        },
+                    let key = if e.checksum_ok {
+                        "doctor-edid-line"
+                    } else {
+                        "doctor-edid-line-bad-checksum"
+                    };
+                    out.push_str("      ");
+                    out.push_str(&t!(
+                        key,
+                        manufacturer = e.manufacturer.as_str(),
+                        product = format!("{:04X}", e.product),
+                        serial = e.serial.to_string(),
+                        name = e.name.as_deref().unwrap_or("?"),
+                        id = e.id.as_str()
                     ));
+                    out.push('\n');
                 }
                 for note in &c.notes {
                     out.push_str(&format!("      · {note}\n"));
@@ -218,49 +248,74 @@ impl Report {
             }
         }
         if !self.buses.is_empty() {
-            out.push_str("\nBus I²C\n");
+            out.push('\n');
+            out.push_str(&t!("doctor-heading-buses"));
+            out.push('\n');
             for b in &self.buses {
                 let access = if b.accessible {
-                    "accès ok"
+                    t!("doctor-access-ok")
                 } else {
-                    "accès refusé"
+                    t!("doctor-access-denied")
                 };
-                let gpu = if b.gpu_ddc {
-                    " [bus DDC de carte graphique]"
+                let key = if b.gpu_ddc {
+                    "doctor-bus-line-gpu"
                 } else {
-                    ""
+                    "doctor-bus-line"
                 };
-                out.push_str(&format!(
-                    "  i2c-{} : {} ({access}){gpu}\n",
-                    b.bus,
-                    b.name.as_deref().unwrap_or("?")
+                out.push_str("  ");
+                out.push_str(&t!(
+                    key,
+                    bus = b.bus.to_string(),
+                    name = b.name.as_deref().unwrap_or("?"),
+                    access = access
                 ));
+                out.push('\n');
             }
         }
         if !self.backlights.is_empty() {
-            out.push_str("\nRétroéclairages\n");
+            out.push('\n');
+            out.push_str(&t!("doctor-heading-backlights"));
+            out.push('\n');
             for b in &self.backlights {
                 let current = b.current.map_or("?".to_owned(), |c| c.to_string());
-                out.push_str(&format!(
-                    "  {} : type {}, max {}, courant {current}\n",
-                    b.name, b.kind, b.max
+                out.push_str("  ");
+                out.push_str(&t!(
+                    "doctor-backlight-line",
+                    name = b.name.as_str(),
+                    kind = b.kind.as_str(),
+                    max = b.max.to_string(),
+                    current = current
                 ));
+                out.push('\n');
             }
         }
         if !self.probes.is_empty() {
-            out.push_str("\nSondes DDC/CI (VCP 0x10)\n");
+            out.push('\n');
+            out.push_str(&t!("doctor-heading-probes"));
+            out.push('\n');
             for p in &self.probes {
+                out.push_str("  ");
                 match (&p.error, p.max, p.current, p.level) {
-                    (None, Some(max), Some(current), Some(level)) => out.push_str(&format!(
-                        "  {} ({}) : max {max}, courant {current} = {level} % [bus i2c-{} via {}]\n",
-                        p.connector, p.id, p.bus, p.bus_source
+                    (None, Some(max), Some(current), Some(level)) => out.push_str(&t!(
+                        "doctor-probe-line-ok",
+                        connector = p.connector.as_str(),
+                        id = p.id.as_str(),
+                        max = max.to_string(),
+                        current = current.to_string(),
+                        level = level.to_string(),
+                        bus = p.bus.to_string(),
+                        source = p.bus_source.as_str()
                     )),
-                    _ => out.push_str(&format!(
-                        "  {} : ÉCHEC — {}\n",
-                        p.connector,
-                        p.error.as_deref().unwrap_or("raison inconnue")
+                    _ => out.push_str(&t!(
+                        "doctor-probe-line-fail",
+                        connector = p.connector.as_str(),
+                        reason = p
+                            .error
+                            .clone()
+                            .unwrap_or_else(|| t!("doctor-probe-unknown-reason"))
                     )),
                 }
+                out.push('\n');
             }
         }
         out
@@ -296,12 +351,12 @@ impl DoctorOptions {
     }
 }
 
-fn check(id: &str, status: Status, summary: impl Into<String>, hint: Option<&str>) -> Check {
+fn check(id: &str, status: Status, summary: impl Into<String>, hint: Option<String>) -> Check {
     Check {
         id: id.to_owned(),
         status,
         summary: summary.into(),
-        hint: hint.map(str::to_owned),
+        hint,
     }
 }
 
@@ -386,22 +441,20 @@ fn i2c_group(root: &Path) -> Option<(u32, bool)> {
 fn connector_report(c: &Connector, access: Option<bool>) -> ConnectorReport {
     let mut notes = Vec::new();
     if c.connected && !c.internal && c.ddc_bus.is_none() {
-        notes.push(
-            "aucun bus DDC exposé : écran derrière un dock/MST/adaptateur, ou pilote NVIDIA propriétaire".to_owned(),
-        );
+        notes.push(t!("doctor-note-no-ddc-bus"));
     }
     if c.connected && c.edid.is_none() {
         notes.push(
             c.edid_problem
                 .clone()
-                .unwrap_or_else(|| "EDID absent".to_owned()),
+                .unwrap_or_else(|| t!("doctor-note-edid-missing")),
         );
     }
     if c.edid.as_ref().is_some_and(|e| !e.checksum_ok) {
-        notes.push("somme de contrôle EDID fausse (fréquent, sans gravité)".to_owned());
+        notes.push(t!("doctor-note-edid-checksum"));
     }
     if c.internal && c.connected {
-        notes.push("panneau interne : piloté par le backlight, jamais en DDC".to_owned());
+        notes.push(t!("doctor-note-internal-panel"));
     }
     ConnectorReport {
         name: c.name.clone(),
@@ -431,13 +484,18 @@ pub async fn run(options: &DoctorOptions) -> Report {
     // 1. Module i2c-dev.
     let module = root.join("sys/module/i2c_dev").exists();
     report.checks.push(if module || !nodes.is_empty() {
-        check("module-i2c-dev", Status::Ok, "module i2c-dev chargé (ou intégré au noyau)", None)
+        check(
+            "module-i2c-dev",
+            Status::Ok,
+            t!("doctor-module-i2c-dev-ok"),
+            None,
+        )
     } else {
         check(
             "module-i2c-dev",
             Status::Fail,
-            "module i2c-dev absent : aucun /dev/i2c-* n'est créé",
-            Some("à lancer vous-même : sudo modprobe i2c-dev\nau démarrage : copier packaging/modules-load.d/ha2lux-i2c-dev.conf dans /etc/modules-load.d/"),
+            t!("doctor-module-i2c-dev-missing"),
+            Some(t!("doctor-module-i2c-dev-missing-hint")),
         )
     });
 
@@ -446,14 +504,14 @@ pub async fn run(options: &DoctorOptions) -> Report {
         check(
             "noeuds-i2c",
             Status::Fail,
-            "aucun nœud /dev/i2c-*",
-            Some("charger le module i2c-dev, puis relancer ha2lux doctor"),
+            t!("doctor-nodes-none"),
+            Some(t!("doctor-nodes-none-hint")),
         )
     } else {
         check(
             "noeuds-i2c",
             Status::Ok,
-            format!("{} nœud(s) /dev/i2c-*", nodes.len()),
+            t!("doctor-nodes-ok", count = nodes.len().to_string()),
             None,
         )
     });
@@ -470,45 +528,68 @@ pub async fn run(options: &DoctorOptions) -> Report {
         .iter()
         .filter_map(|(name, bus)| match access.get(bus) {
             Some(Ok(())) => None,
-            Some(Err(e)) => Some(format!("{name} (i2c-{bus}) : {e}")),
-            None => Some(format!("{name} (i2c-{bus}) : nœud /dev/i2c-{bus} absent")),
+            Some(Err(e)) => Some(t!(
+                "doctor-access-denied-item",
+                name = name.as_str(),
+                bus = *bus,
+                error = e.as_str()
+            )),
+            None => Some(t!(
+                "doctor-access-denied-absent",
+                name = name.as_str(),
+                bus = *bus
+            )),
         })
         .collect();
     let accessible = access.values().filter(|r| r.is_ok()).count();
-    const ACCESS_HINT: &str = "installer packaging/udev/60-ha2lux-i2c.rules dans /etc/udev/rules.d/, puis : sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=i2c-dev\nou ajouter l'utilisateur au groupe i2c et se reconnecter";
+    let access_hint = t!("doctor-access-hint");
     report.checks.push(if !denied.is_empty() {
         check(
             "acces-i2c",
             Status::Fail,
-            format!("accès refusé aux bus des écrans : {}", denied.join(" ; ")),
-            Some(ACCESS_HINT),
+            t!("doctor-access-denied-buses", list = denied.join(" ; ")),
+            Some(access_hint),
         )
     } else if !nodes.is_empty() && accessible == 0 {
         check(
             "acces-i2c",
             Status::Warn,
-            "aucun nœud /dev/i2c-* n'est accessible par cet utilisateur",
-            Some(ACCESS_HINT),
+            t!("doctor-access-none-accessible"),
+            Some(access_hint),
         )
     } else if nodes.is_empty() {
-        check("acces-i2c", Status::Info, "non évalué : aucun nœud", None)
+        check(
+            "acces-i2c",
+            Status::Info,
+            t!("doctor-access-not-evaluated"),
+            None,
+        )
     } else {
         check(
             "acces-i2c",
             Status::Ok,
-            format!("{accessible}/{} nœud(s) accessible(s)", nodes.len()),
+            t!(
+                "doctor-access-summary",
+                accessible = accessible.to_string(),
+                total = nodes.len().to_string()
+            ),
             None,
         )
     });
 
     // 4. Règle udev.
     report.checks.push(match find_udev_rule(root) {
-        Some(path) => check("regle-udev", Status::Ok, format!("règle udev trouvée : {}", path.display()), None),
+        Some(path) => check(
+            "regle-udev",
+            Status::Ok,
+            t!("doctor-udev-ok", path = path.display().to_string()),
+            None,
+        ),
         None => check(
             "regle-udev",
             Status::Warn,
-            "aucune règle udev donnant accès à i2c-dev n'a été trouvée",
-            Some("fichier fourni : packaging/udev/60-ha2lux-i2c.rules (à installer dans /etc/udev/rules.d/)"),
+            t!("doctor-udev-missing"),
+            Some(t!("doctor-udev-missing-hint")),
         ),
     });
 
@@ -517,18 +598,14 @@ pub async fn run(options: &DoctorOptions) -> Report {
         Some((gid, member)) => check(
             "groupe-i2c",
             Status::Info,
-            format!(
-                "groupe i2c présent (gid {gid}), utilisateur {}",
-                if member { "membre" } else { "non membre" }
-            ),
+            if member {
+                t!("doctor-group-member", gid = gid.to_string())
+            } else {
+                t!("doctor-group-not-member", gid = gid.to_string())
+            },
             None,
         ),
-        None => check(
-            "groupe-i2c",
-            Status::Info,
-            "pas de groupe i2c (l'accès repose sur l'ACL udev « uaccess »)",
-            None,
-        ),
+        None => check("groupe-i2c", Status::Info, t!("doctor-group-none"), None),
     });
 
     // 6. Pilote noyau ddcci.
@@ -536,8 +613,8 @@ pub async fn run(options: &DoctorOptions) -> Report {
         report.checks.push(check(
             "pilote-ddcci",
             Status::Warn,
-            "le pilote noyau ddcci est chargé : il peut occuper l'adresse 0x37 et gêner l'accès direct",
-            Some("décharger ddcci si l'écriture échoue avec « device busy »"),
+            t!("doctor-ddcci"),
+            Some(t!("doctor-ddcci-hint")),
         ));
     }
 
@@ -546,8 +623,8 @@ pub async fn run(options: &DoctorOptions) -> Report {
         report.checks.push(check(
             "pilote-nvidia",
             Status::Info,
-            "pilote NVIDIA propriétaire détecté : les bus DDC des connecteurs peuvent ne pas être exposés dans sysfs",
-            Some("si un écran externe n'a pas de bus DDC, utiliser les nœuds i2c du pilote NVIDIA"),
+            t!("doctor-nvidia"),
+            Some(t!("doctor-nvidia-hint")),
         ));
     }
 
@@ -557,20 +634,15 @@ pub async fn run(options: &DoctorOptions) -> Report {
         .filter(|c| c.connected && !c.internal)
         .collect();
     report.checks.push(if connectors.is_empty() {
-        check(
-            "drm",
-            Status::Warn,
-            "aucun connecteur DRM lisible dans /sys/class/drm",
-            None,
-        )
+        check("drm", Status::Warn, t!("doctor-drm-none"), None)
     } else {
         check(
             "drm",
             Status::Ok,
-            format!(
-                "{} connecteur(s), {} écran(s) externe(s) connecté(s)",
-                connectors.len(),
-                externals.len()
+            t!(
+                "doctor-drm-ok",
+                connectors = connectors.len().to_string(),
+                externals = externals.len().to_string()
             ),
             None,
         )
@@ -588,11 +660,11 @@ pub async fn run(options: &DoctorOptions) -> Report {
         report.checks.push(check(
             "ddc-connecteurs",
             Status::Warn,
-            format!("écran(s) externe(s) sans bus DDC exposé : {}", without_bus.join(", ")),
+            t!("doctor-ddc-connectors", list = without_bus.join(", ")),
             Some(if gpu_buses > 0 {
-                "pilote NVIDIA : les bus DDC existent (voir « Bus I²C ») mais ne sont pas liés aux connecteurs ; ha2lux doctor --probe lit l'EDID de chaque bus GPU pour les associer"
+                t!("doctor-ddc-connectors-hint-gpu")
             } else {
-                "dock, MST, adaptateur DP→HDMI ou DisplayLink : le DDC y est souvent absent ; surcharge possible par écran (ddc = false)"
+                t!("doctor-ddc-connectors-hint-dock")
             }),
         ));
     }
@@ -605,11 +677,8 @@ pub async fn run(options: &DoctorOptions) -> Report {
         report.checks.push(check(
             "edid",
             Status::Warn,
-            format!(
-                "écran(s) connecté(s) sans EDID lisible : {}",
-                without_edid.join(", ")
-            ),
-            Some("sans EDID, l'écran n'a pas d'identité stable et n'est pas piloté"),
+            t!("doctor-edid", list = without_edid.join(", ")),
+            Some(t!("doctor-edid-hint")),
         ));
     }
     report.connectors = connectors
@@ -653,26 +722,43 @@ pub async fn run(options: &DoctorOptions) -> Report {
             current,
         });
     }
-    report.checks.push(match (backlights.is_empty(), has_internal) {
-        (false, _) => check("backlight", Status::Ok, format!("{} rétroéclairage(s) détecté(s)", backlights.len()), None),
-        (true, true) => check(
-            "backlight",
-            Status::Warn,
-            "panneau interne connecté mais aucun rétroéclairage dans /sys/class/backlight",
-            Some("certains portables n'en exposent pas (pilote hybride, firmware) : voir acpi_backlight= dans la ligne de commande du noyau"),
-        ),
-        (true, false) => check("backlight", Status::Info, "aucun panneau interne (poste fixe)", None),
-    });
+    report
+        .checks
+        .push(match (backlights.is_empty(), has_internal) {
+            (false, _) => check(
+                "backlight",
+                Status::Ok,
+                t!("doctor-backlight-ok", count = backlights.len().to_string()),
+                None,
+            ),
+            (true, true) => check(
+                "backlight",
+                Status::Warn,
+                t!("doctor-backlight-missing"),
+                Some(t!("doctor-backlight-missing-hint")),
+            ),
+            (true, false) => check(
+                "backlight",
+                Status::Info,
+                t!("doctor-backlight-no-internal"),
+                None,
+            ),
+        });
 
     // 11. Session logind (nécessaire à l'écriture du backlight).
     if !backlights.is_empty() {
         report.checks.push(match &options.session_id {
-            Some(id) => check("session-logind", Status::Ok, format!("session logind {id} (écriture du backlight via SetBrightness)"), None),
+            Some(id) => check(
+                "session-logind",
+                Status::Ok,
+                t!("doctor-session-ok", id = id.as_str()),
+                None,
+            ),
             None => check(
                 "session-logind",
                 Status::Warn,
-                "pas de XDG_SESSION_ID : le backlight ne sera réglable que depuis une session graphique",
-                Some("lancer depuis la session de bureau (pas via SSH) ; un service systemd --user retombe sur la session graphique de l'utilisateur"),
+                t!("doctor-session-missing"),
+                Some(t!("doctor-session-missing-hint")),
             ),
         });
     }
@@ -712,7 +798,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
                 error: None,
             };
             if !access.get(&candidate.bus).is_some_and(Result::is_ok) {
-                probe.error = Some("nœud inaccessible, sonde ignorée".to_owned());
+                probe.error = Some(t!("doctor-probe-node-inaccessible"));
                 report.probes.push(probe);
                 continue;
             }
@@ -737,7 +823,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
                     probe.level = Some(level_from_raw(current, max));
                 }
                 Ok(Err(error)) => probe.error = Some(error.to_string()),
-                Err(_) => probe.error = Some("aucune réponse en 10 s".to_owned()),
+                Err(_) => probe.error = Some(t!("doctor-probe-timeout", seconds = 10)),
             }
             report.probes.push(probe);
         }
@@ -748,23 +834,28 @@ pub async fn run(options: &DoctorOptions) -> Report {
             .map(|p| p.connector.as_str())
             .collect();
         report.checks.push(if report.probes.is_empty() {
-            check("sonde-ddc", Status::Info, "aucun écran externe à sonder", None)
+            check("sonde-ddc", Status::Info, t!("doctor-probe-none"), None)
         } else if failed.is_empty() {
-            check("sonde-ddc", Status::Ok, format!("{} écran(s) répondent en DDC/CI", report.probes.len()), None)
+            check(
+                "sonde-ddc",
+                Status::Ok,
+                t!("doctor-probe-ok", count = report.probes.len().to_string()),
+                None,
+            )
         } else {
             check(
                 "sonde-ddc",
                 Status::Fail,
-                format!("pas de réponse DDC/CI : {}", failed.join(", ")),
-                Some("vérifier que DDC/CI est activé dans le menu OSD de l'écran, le câble, et éviter dock/KVM ; un écran qui dort répond « null message »"),
+                t!("doctor-probe-failed", list = failed.join(", ")),
+                Some(t!("doctor-probe-failed-hint")),
             )
         });
     } else {
         report.checks.push(check(
             "sonde-ddc",
             Status::Info,
-            "sonde DDC non exécutée (elle envoie de vraies trames aux écrans)",
-            Some("ajouter --probe pour lire la luminosité (VCP 0x10) de chaque écran externe"),
+            t!("doctor-probe-not-run"),
+            Some(t!("doctor-probe-not-run-hint")),
         ));
     }
     report

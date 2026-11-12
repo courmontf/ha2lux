@@ -223,7 +223,9 @@ async fn until(what: &str, mut condition: impl FnMut() -> bool) {
 fn method_error(error: &zbus::Error) -> String {
     match error {
         zbus::Error::MethodError(name, detail, _) => {
-            format!("{} {}", name.as_str(), detail.clone().unwrap_or_default())
+            // Comme le client : le détail est une clé + arguments à traduire.
+            let detail = ha2lux_i18n::wire::localize(&detail.clone().unwrap_or_default());
+            format!("{} {detail}", name.as_str())
         }
         other => format!("{other}"),
     }

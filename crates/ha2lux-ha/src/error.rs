@@ -41,6 +41,22 @@ impl HaError {
     pub fn is_auth(&self) -> bool {
         matches!(self, Self::Auth)
     }
+
+    /// Message localisable pour un client (clé de catalogue + arguments) ; voir
+    /// [`ha2lux_i18n::wire`]. Le `Display` reste le texte pour les journaux.
+    pub fn to_wire(&self) -> String {
+        use ha2lux_i18n::wire::encode;
+        match self {
+            Self::Auth => encode("err-ha-auth", &[]),
+            Self::NotFound => encode("err-ha-not-found", &[]),
+            Self::Redirect => encode("err-ha-redirect", &[]),
+            Self::TooLarge => encode("err-ha-too-large", &[]),
+            Self::Tls(detail) => encode("err-ha-tls", &[("detail", detail)]),
+            Self::Timeout => encode("err-ha-timeout", &[]),
+            Self::Connection(detail) => encode("err-ha-connection", &[("detail", detail)]),
+            Self::Protocol(detail) => encode("err-ha-protocol", &[("detail", detail)]),
+        }
+    }
 }
 
 /// Classe une erreur de `reqwest` sans jamais exposer d'URL ni d'en-tête.

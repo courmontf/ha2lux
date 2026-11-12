@@ -35,6 +35,20 @@ pub enum SecretError {
     Other(String),
 }
 
+impl SecretError {
+    /// Message localisable pour un client (clé de catalogue + arguments) ; voir
+    /// [`ha2lux_i18n::wire`]. Le `Display` reste le texte pour les journaux.
+    pub fn to_wire(&self) -> String {
+        use ha2lux_i18n::wire::encode;
+        match self {
+            Self::Unavailable(detail) => encode("err-keyring-unavailable", &[("detail", detail)]),
+            Self::Locked => encode("err-keyring-locked", &[]),
+            Self::TooOpen(path) => encode("err-secret-file-too-open", &[("path", path)]),
+            Self::Other(message) => message.clone(),
+        }
+    }
+}
+
 /// Où un secret a été rangé.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stored {

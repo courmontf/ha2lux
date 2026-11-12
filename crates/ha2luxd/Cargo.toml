@@ -17,6 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 ha2lux-core.workspace = true
+ha2lux-i18n = { path = "../ha2lux-i18n" }
 ha2lux-backends = { path = "../ha2lux-backends" }
 ha2lux-ipc = { path = "../ha2lux-ipc" }
 thiserror.workspace = true

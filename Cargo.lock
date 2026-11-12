@@ -708,6 +708,7 @@ name = "ha2lux-backends"
 version = "0.5.0"
 dependencies = [
  "ha2lux-core",
+ "ha2lux-i18n",
  "i2cdev",
  "proptest",
  "serde",
@@ -754,6 +755,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "ha2lux-core",
+ "ha2lux-i18n",
  "proptest",
  "rcgen",
  "reqwest",
@@ -791,6 +793,7 @@ version = "0.5.0"
 dependencies = [
  "futures-util",
  "ha2lux-core",
+ "ha2lux-i18n",
  "serde",
  "serde_json",
  "tempfile",
@@ -827,6 +830,7 @@ dependencies = [
  "ha2lux-backends",
  "ha2lux-core",
  "ha2lux-ha",
+ "ha2lux-i18n",
  "ha2lux-ipc",
  "ha2lux-secrets",
  "netlink-sys",

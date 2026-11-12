@@ -49,7 +49,7 @@ pub struct SecretTokens<S>(pub Arc<S>);
 impl<S: SecretStore + 'static> Tokens for SecretTokens<S> {
     fn get(&self, key: &str) -> BoxFut<Result<Option<String>, String>> {
         let (store, key) = (Arc::clone(&self.0), key.to_owned());
-        Box::pin(async move { store.get(&key).await.map_err(|e| e.to_string()) })
+        Box::pin(async move { store.get(&key).await.map_err(|e| e.to_wire()) })
     }
     fn set(&self, key: &str, token: &str) -> BoxFut<Result<(), String>> {
         let (store, key, token) = (Arc::clone(&self.0), key.to_owned(), token.to_owned());
@@ -58,12 +58,12 @@ impl<S: SecretStore + 'static> Tokens for SecretTokens<S> {
                 .set(&key, &token)
                 .await
                 .map(|_| ())
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_wire())
         })
     }
     fn delete(&self, key: &str) -> BoxFut<Result<bool, String>> {
         let (store, key) = (Arc::clone(&self.0), key.to_owned());
-        Box::pin(async move { store.delete(&key).await.map_err(|e| e.to_string()) })
+        Box::pin(async move { store.delete(&key).await.map_err(|e| e.to_wire()) })
     }
 }
 
@@ -85,10 +85,10 @@ impl Sources for RealSources {
         let url = url.to_owned();
         Box::pin(async move {
             let config = HaConfig::new(&url, "sensor.placeholder", Token::new(token))
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| e.to_wire())?;
             list_illuminance_sensors(&config)
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_wire())
         })
     }
 }

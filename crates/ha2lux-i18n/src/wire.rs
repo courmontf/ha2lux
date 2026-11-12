@@ -139,6 +139,97 @@ mod tests {
         assert_eq!(args.len(), 3);
     }
 
+    /// Textes exacts des messages du démon (inchangés par rapport à avant l'i18n).
+    #[test]
+    fn daemon_messages_render_exactly() {
+        let fr = Localizer::try_new("fr").expect("catalogue fr");
+        let cases: Vec<(String, &str)> = vec![
+            (
+                encode(
+                    "err-percent-out-of-range",
+                    &[("what", &"master-level"), ("value", &150)],
+                ),
+                "niveau maître hors bornes : 150 (attendu 0 à 100)",
+            ),
+            (
+                encode(
+                    "err-percent-out-of-range",
+                    &[("what", &"display-level"), ("value", &-3)],
+                ),
+                "niveau écran hors bornes : -3 (attendu 0 à 100)",
+            ),
+            (
+                encode("err-out-of-range", &[("what", &"step"), ("value", &200)]),
+                "pas hors bornes : 200",
+            ),
+            (
+                encode("err-step-out-of-range", &[("delta", &0)]),
+                "pas hors bornes : 0 (attendu 1 à 100, positif ou négatif)",
+            ),
+            (
+                encode("err-range-out-of-range", &[("low", &5), ("high", &101)]),
+                "plage hors bornes : (5, 101) (attendu 0 à 100)",
+            ),
+            (
+                encode(
+                    "err-unknown-preset",
+                    &[("name", &"Zzz"), ("available", &"Night=30, Day=80")],
+                ),
+                "preset inconnu : Zzz ; disponibles : Night=30, Day=80",
+            ),
+            (
+                encode(
+                    "err-unknown-feature",
+                    &[
+                        ("feature", &"foo"),
+                        ("first", &"schedule"),
+                        ("second", &"idle-dim"),
+                        ("third", &"auto"),
+                    ],
+                ),
+                "fonction inconnue : foo (attendu : schedule, idle-dim ou auto)",
+            ),
+            (
+                encode("err-unknown-display", &[("id", &"x")]),
+                "écran inconnu : x",
+            ),
+            (
+                encode("err-display-unavailable", &[("id", &"x")]),
+                "écran indisponible : x",
+            ),
+            (
+                encode("err-no-controllable-display", &[]),
+                "aucun écran contrôlable",
+            ),
+            (encode("err-token-empty", &[]), "jeton vide"),
+            (
+                encode("err-display-id-invalid", &[("max", &128)]),
+                "identifiant d'écran invalide (1 à 128 caractères, sans caractère de contrôle)",
+            ),
+            (encode("err-daemon-stopped", &[]), "le démon est arrêté"),
+            (
+                encode("err-ha-tls", &[("detail", &"certificat")]),
+                "erreur TLS : certificat",
+            ),
+            (
+                encode("err-keyring-locked", &[]),
+                "trousseau verrouillé : déverrouillage refusé ou expiré",
+            ),
+        ];
+        for (wire, expected) in cases {
+            let text = fr.localize(&wire);
+            if !expected.starts_with("identifiant") {
+                assert_eq!(text, expected, "{wire}");
+            } else {
+                // Le maximum réel est une constante du démon : seule la forme compte ici.
+                assert!(
+                    text.starts_with("identifiant d'écran invalide (1 à "),
+                    "{text}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn localize_translates_known_keys_and_keeps_the_rest() {
         let fr = Localizer::try_new("fr").expect("catalogue fr");

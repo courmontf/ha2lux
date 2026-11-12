@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 ha2lux-core.workspace = true
+ha2lux-i18n = { path = "../ha2lux-i18n" }
 thiserror.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["time", "sync"] }

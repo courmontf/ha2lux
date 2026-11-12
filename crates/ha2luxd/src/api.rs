@@ -4,6 +4,7 @@
 //! machine d'états : la validation côté client (CLI, tray) n'est qu'un confort.
 
 use ha2lux_core::{ControlError, DisplayId};
+use ha2lux_i18n::wire;
 use ha2lux_ipc::{DaemonError, DisplayDto};
 use thiserror::Error;
 
@@ -203,9 +204,10 @@ pub enum ApiError {
 impl From<ControlError> for ApiError {
     fn from(error: ControlError) -> Self {
         match error {
-            ControlError::OutOfRange { what, value } => {
-                Self::OutOfRange(format!("{what} hors bornes : {value}"))
-            }
+            ControlError::OutOfRange { what, value } => Self::OutOfRange(wire::encode(
+                "err-out-of-range",
+                &[("what", &what), ("value", &value)],
+            )),
             ControlError::UnknownDisplay(id) => Self::UnknownDisplay(id.to_string()),
             ControlError::DisplayUnavailable(id) => Self::DisplayUnavailable(id.to_string()),
             ControlError::NoControllableDisplay => Self::NoControllableDisplay,
@@ -215,17 +217,25 @@ impl From<ControlError> for ApiError {
 
 impl From<ApiError> for DaemonError {
     fn from(error: ApiError) -> Self {
-        let text = error.to_string();
+        // Les messages sont envoyés sous forme de clé + arguments : chaque client
+        // les traduit dans sa langue (voir `ha2lux_i18n::wire`).
         match error {
-            ApiError::InvalidArgs(_) => Self::InvalidArgs(text),
-            ApiError::OutOfRange(_) => Self::OutOfRange(text),
-            ApiError::UnknownDisplay(_) => Self::UnknownDisplay(text),
-            ApiError::DisplayUnavailable(_) => Self::DisplayUnavailable(text),
-            ApiError::NoControllableDisplay => Self::NoControllableDisplay(text),
-            ApiError::UnknownPreset(_) => Self::UnknownPreset(text),
-            ApiError::NotConfigured(_) => Self::NotConfigured(text),
-            ApiError::ConfigInvalid(_) => Self::ConfigInvalid(text),
-            ApiError::Failed(_) | ApiError::Stopped => Self::Internal(text),
+            ApiError::InvalidArgs(text) => Self::InvalidArgs(text),
+            ApiError::OutOfRange(text) => Self::OutOfRange(text),
+            ApiError::UnknownDisplay(id) => {
+                Self::UnknownDisplay(wire::encode("err-unknown-display", &[("id", &id)]))
+            }
+            ApiError::DisplayUnavailable(id) => {
+                Self::DisplayUnavailable(wire::encode("err-display-unavailable", &[("id", &id)]))
+            }
+            ApiError::NoControllableDisplay => {
+                Self::NoControllableDisplay(wire::encode("err-no-controllable-display", &[]))
+            }
+            ApiError::UnknownPreset(text) => Self::UnknownPreset(text),
+            ApiError::NotConfigured(text) => Self::NotConfigured(text),
+            ApiError::ConfigInvalid(text) => Self::ConfigInvalid(text),
+            ApiError::Failed(text) => Self::Internal(text),
+            ApiError::Stopped => Self::Internal(wire::encode("err-daemon-stopped", &[])),
         }
     }
 }
@@ -235,8 +245,9 @@ pub fn percent(what: &str, value: u32) -> Result<i64, ApiError> {
     if value <= 100 {
         Ok(i64::from(value))
     } else {
-        Err(ApiError::OutOfRange(format!(
-            "{what} hors bornes : {value} (attendu 0 à 100)"
+        Err(ApiError::OutOfRange(wire::encode(
+            "err-percent-out-of-range",
+            &[("what", &what), ("value", &value)],
         )))
     }
 }
@@ -244,8 +255,9 @@ pub fn percent(what: &str, value: u32) -> Result<i64, ApiError> {
 /// Valide un identifiant d'écran reçu d'un client.
 pub fn display_id(id: &str) -> Result<DisplayId, ApiError> {
     if id.is_empty() || id.chars().count() > MAX_DISPLAY_ID || id.chars().any(char::is_control) {
-        return Err(ApiError::InvalidArgs(format!(
-            "identifiant d'écran invalide (1 à {MAX_DISPLAY_ID} caractères, sans caractère de contrôle)"
+        return Err(ApiError::InvalidArgs(wire::encode(
+            "err-display-id-invalid",
+            &[("max", &MAX_DISPLAY_ID)],
         )));
     }
     Ok(DisplayId::new(id))
@@ -257,8 +269,9 @@ pub fn preset_name(name: &str) -> Result<&str, ApiError> {
         || name.chars().count() > MAX_PRESET_NAME
         || name.chars().any(char::is_control)
     {
-        return Err(ApiError::InvalidArgs(format!(
-            "nom de preset invalide (1 à {MAX_PRESET_NAME} caractères, sans caractère de contrôle)"
+        return Err(ApiError::InvalidArgs(wire::encode(
+            "err-preset-name-invalid",
+            &[("max", &MAX_PRESET_NAME)],
         )));
     }
     Ok(name)

@@ -12,6 +12,31 @@
 //! ```
 //!
 //! Les journaux (`tracing`) et les identifiants D-Bus ne sont **pas** traduits.
+//!
+//! # Où vivent les textes
+//!
+//! - `locales/<langue>/cli.ftl` : CLI `ha2lux` (sortie, erreurs, aide) ;
+//! - `locales/<langue>/tray.ftl` : icône de zone de notification ;
+//! - `locales/<langue>/daemon.ftl` : messages du démon, envoyés aux clients sous
+//!   forme de clé + arguments (voir [`wire`]) et traduits par le client ;
+//! - `locales/<langue>/doctor.ftl` : rapport `ha2lux doctor`.
+//!
+//! # Ajouter une langue (ex. `en`)
+//!
+//! 1. Créer `locales/en/` avec les mêmes fichiers `.ftl` que `locales/fr/`
+//!    (mêmes clés, mêmes `$variables`) ;
+//! 2. les déclarer dans `CATALOGS` (`src/lib.rs`) ;
+//! 3. `cargo test -p ha2lux-i18n` vérifie que chaque fichier est embarqué et que
+//!    la nouvelle langue définit exactement les clés de `fr` ;
+//! 4. essayer : `HA2LUX_LANG=en ha2lux --help`.
+//!
+//! # Écrire du code qui affiche du texte
+//!
+//! Jamais de phrase en dur : `t!("cli-list-empty")`, ou avec des variables
+//! `t!("cli-display-level", name = nom, number = n, level = niveau)`. Pas de
+//! retour à la ligne final dans les messages (le code l'ajoute), et les nombres
+//! dont le format compte (`{:.0}`, `{:04X}`) se passent déjà formatés. Un test
+//! vérifie que toute clé citée dans le code existe dans le catalogue.
 #![forbid(unsafe_code)]
 
 pub mod wire;
@@ -45,6 +70,8 @@ const CATALOGS: &[Catalog] = &[Catalog {
         ("common.ftl", include_str!("../locales/fr/common.ftl")),
         ("cli.ftl", include_str!("../locales/fr/cli.ftl")),
         ("tray.ftl", include_str!("../locales/fr/tray.ftl")),
+        ("daemon.ftl", include_str!("../locales/fr/daemon.ftl")),
+        ("doctor.ftl", include_str!("../locales/fr/doctor.ftl")),
     ],
 }];
 
@@ -120,15 +147,19 @@ impl Localizer {
     /// Charge `lang` (repli : [`FALLBACK_LANG`]). Erreur si un catalogue est
     /// mal formé ou contient un identifiant en double — vérifié par les tests.
     pub fn try_new(lang: &str) -> Result<Self, String> {
-        let primary_catalog = CATALOGS
+        Self::with_catalogs(CATALOGS, lang)
+    }
+
+    fn with_catalogs(catalogs: &[Catalog], lang: &str) -> Result<Self, String> {
+        let primary_catalog = catalogs
             .iter()
             .find(|c| c.lang == lang)
-            .or_else(|| CATALOGS.iter().find(|c| c.lang == FALLBACK_LANG))
+            .or_else(|| catalogs.iter().find(|c| c.lang == FALLBACK_LANG))
             .ok_or_else(|| "aucun catalogue embarqué".to_owned())?;
         let fallback = if primary_catalog.lang == FALLBACK_LANG {
             None
         } else {
-            CATALOGS
+            catalogs
                 .iter()
                 .find(|c| c.lang == FALLBACK_LANG)
                 .map(build_bundle)
@@ -295,6 +326,112 @@ mod tests {
         assert_eq!(
             on_disk, embedded,
             "fichiers .ftl non embarqués (ou en trop)"
+        );
+    }
+
+    /// Une langue partielle : ses clés l'emportent, les autres retombent sur `fr`,
+    /// et les pluriels suivent les règles de la langue.
+    #[test]
+    fn a_partial_language_falls_back_key_by_key_and_handles_plurals() {
+        const CATALOGS_TEST: &[Catalog] = &[
+            Catalog {
+                lang: "fr",
+                files: &[(
+                    "t.ftl",
+                    "only-fr = seulement en français\nboth = français\n",
+                )],
+            },
+            Catalog {
+                lang: "en",
+                files: &[(
+                    "t.ftl",
+                    "both = english\ndisplays = { $n ->\n    [one] { $n } display\n   *[other] { $n } displays\n }\n",
+                )],
+            },
+        ];
+        let en = Localizer::with_catalogs(CATALOGS_TEST, "en").expect("catalogue en");
+        assert_eq!(en.lang(), "en");
+        assert_eq!(en.translate("both", None), "english");
+        assert_eq!(en.translate("only-fr", None), "seulement en français");
+        assert_eq!(en.translate("absent", None), "absent");
+        for (n, expected) in [(1, "1 display"), (3, "3 displays")] {
+            let mut args = FluentArgs::new();
+            args.set("n", arg(n));
+            assert_eq!(en.translate("displays", Some(&args)), expected);
+        }
+        // Langue inconnue : retombe sur le français.
+        let unknown = Localizer::with_catalogs(CATALOGS_TEST, "de").expect("repli");
+        assert_eq!(unknown.lang(), "fr");
+        assert_eq!(unknown.translate("both", None), "français");
+    }
+
+    /// Chaque clé citée dans le code (`t!("…")`, `encode("…")`) existe dans le
+    /// catalogue de repli : une faute de frappe ne passerait sinon pas inaperçue.
+    #[test]
+    fn every_key_used_in_code_exists() {
+        fn rust_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).expect("dossier") {
+                let path = entry.expect("entrée").path();
+                if path.is_dir() {
+                    rust_files(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let reference = CATALOGS
+            .iter()
+            .find(|c| c.lang == FALLBACK_LANG)
+            .expect("langue de repli");
+        let mut known = BTreeSet::new();
+        for (_, source) in reference.files {
+            for line in source.lines() {
+                if line.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+                    && let Some((id, _)) = line.split_once('=')
+                {
+                    known.insert(id.trim().to_owned());
+                }
+            }
+        }
+        let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut files = Vec::new();
+        for krate in std::fs::read_dir(&crates).expect("crates") {
+            let src = krate.expect("entrée").path().join("src");
+            if src.is_dir() {
+                rust_files(&src, &mut files);
+            }
+        }
+        let mut unknown = Vec::new();
+        let mut checked = 0_usize;
+        for file in files {
+            let text = std::fs::read_to_string(&file).expect("lecture");
+            for marker in ["t!(", "encode("] {
+                let mut rest = text.as_str();
+                while let Some(at) = rest.find(marker) {
+                    rest = &rest[at + marker.len()..];
+                    let after = rest.trim_start();
+                    if let Some(body) = after.strip_prefix('"')
+                        && let Some(end) = body.find('"')
+                    {
+                        let key = &body[..end];
+                        let looks_like_key = key.contains('-')
+                            && key.chars().all(|c| c.is_ascii_lowercase() || c == '-');
+                        checked += usize::from(looks_like_key);
+                        if looks_like_key && !known.contains(key) {
+                            unknown.push(format!("{} : {key}", file.display()));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            unknown.is_empty(),
+            "clés absentes du catalogue : {unknown:#?}"
+        );
+        // Garde-fou contre un balayage qui ne verrait plus rien (motif cassé).
+        assert!(
+            checked >= 150,
+            "le balayage ne voit que {checked} clés : motif cassé ?"
         );
     }
 
