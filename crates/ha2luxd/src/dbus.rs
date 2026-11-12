@@ -184,28 +184,28 @@ mod interface {
         async fn sensors(&self) -> Result<Vec<(String, String, String)>, DaemonError> {
             match self.handle.request(Request::ListSensors).await? {
                 Reply::Sensors(list) => Ok(list),
-                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+                _ => Err(DaemonError::Internal("unexpected response".to_owned())),
             }
         }
 
         async fn presets(&self) -> Result<Vec<(String, u32)>, DaemonError> {
             match self.handle.request(Request::Presets).await? {
                 Reply::Presets(list) => Ok(list),
-                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+                _ => Err(DaemonError::Internal("unexpected response".to_owned())),
             }
         }
 
         async fn list(&self) -> Result<Vec<DisplayDto>, DaemonError> {
             match self.handle.request(Request::List).await? {
                 Reply::List(list) => Ok(list),
-                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+                _ => Err(DaemonError::Internal("unexpected response".to_owned())),
             }
         }
 
         async fn status(&self) -> Result<HashMap<String, OwnedValue>, DaemonError> {
             match self.handle.request(Request::Status).await? {
                 Reply::Status(status) => Ok(status_to_map(&status)),
-                _ => Err(DaemonError::Internal("réponse inattendue".to_owned())),
+                _ => Err(DaemonError::Internal("unexpected response".to_owned())),
             }
         }
 
@@ -257,7 +257,7 @@ mod interface {
             .interface::<_, DaemonInterface>(OBJECT_PATH)
             .await
         else {
-            tracing::error!("objet D-Bus introuvable : signaux désactivés");
+            tracing::error!("D-Bus object not found: signals disabled");
             return;
         };
         while let Some(signal) = signals.recv().await {
@@ -285,7 +285,7 @@ mod interface {
                 }
             };
             if let Err(error) = result {
-                tracing::debug!(%error, "signal D-Bus non émis");
+                tracing::debug!(%error, "D-Bus signal not emitted");
             }
         }
     }

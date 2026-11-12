@@ -106,7 +106,7 @@ pub async fn watch_uevents(handle: DaemonHandle) -> io::Result<()> {
             && is_display_event(&event)
             && handle.send_system(SystemEvent::Hotplug).await.is_err()
         {
-            return Ok(()); // le démon est arrêté
+            return Ok(()); // the daemon is stopped
         }
     }
 }
@@ -200,7 +200,7 @@ pub async fn watch_logind(
                 .await?,
         ),
         Err(error) => {
-            tracing::warn!(%error, "session logind introuvable : verrouillage et session active non surveillés");
+            tracing::warn!(%error, "logind session not found: lock and active session not monitored");
             None
         }
     };
@@ -243,14 +243,14 @@ pub async fn watch_logind(
             Some(change) = next!(active) => match change.get().await {
                 Ok(is_active) => SystemEvent::SessionActive(is_active),
                 Err(error) => {
-                    tracing::debug!(%error, "propriété Active illisible");
+                    tracing::debug!(%error, "Active property unreadable");
                     continue;
                 }
             },
             else => return Ok(()),
         };
         if handle.send_system(event).await.is_err() {
-            return Ok(()); // le démon est arrêté
+            return Ok(()); // the daemon is stopped
         }
     }
 }

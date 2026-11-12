@@ -58,13 +58,13 @@ impl Default for Timeouts {
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ConfigError {
     /// Adresse refusée.
-    #[error("adresse de Home Assistant invalide : {0}")]
+    #[error("invalid Home Assistant address: {0}")]
     Url(#[from] UrlError),
     /// Identifiant d'entité invalide.
-    #[error("identifiant d'entité invalide (attendu : domaine.objet)")]
+    #[error("invalid entity identifier (expected: domain.object)")]
     Entity,
     /// Jeton absent.
-    #[error("jeton d'accès absent")]
+    #[error("access token missing")]
     NoToken,
 }
 

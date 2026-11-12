@@ -70,7 +70,7 @@ fn state_text(value: Option<serde_json::Value>) -> Result<String, HaError> {
 /// Interprète le corps JSON d'un `GET /api/states/<entité>` ou un `to_state` d'événement.
 pub fn parse_state_body(body: &[u8]) -> Result<Reading, HaError> {
     let parsed: StateBody =
-        serde_json::from_slice(body).map_err(|_| HaError::Protocol("JSON invalide".to_owned()))?;
+        serde_json::from_slice(body).map_err(|_| HaError::Protocol("invalid JSON".to_owned()))?;
     let raw_state = state_text(parsed.state)?;
     Ok(Reading {
         value: parse_state_text(&raw_state),
@@ -82,6 +82,6 @@ pub fn parse_state_body(body: &[u8]) -> Result<Reading, HaError> {
 /// Interprète un objet d'état déjà décodé (événement WebSocket).
 pub fn parse_state_value(value: &serde_json::Value) -> Result<Reading, HaError> {
     let bytes =
-        serde_json::to_vec(value).map_err(|_| HaError::Protocol("état illisible".to_owned()))?;
+        serde_json::to_vec(value).map_err(|_| HaError::Protocol("unreadable state".to_owned()))?;
     parse_state_body(&bytes)
 }

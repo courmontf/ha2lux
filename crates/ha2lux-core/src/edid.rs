@@ -10,10 +10,10 @@ const HEADER: [u8; 8] = [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00];
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum EdidError {
     /// Moins de 128 octets.
-    #[error("EDID trop court ({0} octets)")]
+    #[error("EDID too short ({0} bytes)")]
     TooShort(usize),
     /// En-tête fixe absent.
-    #[error("EDID sans en-tête valide")]
+    #[error("EDID without a valid header")]
     BadHeader,
 }
 

@@ -201,7 +201,7 @@ pub fn load_state(path: &Path) -> StateLoad {
             set_aside: false,
         },
         Err(error) => {
-            tracing::warn!(%error, "fichier d'état illisible : conservé en .corrupt, état vide");
+            tracing::warn!(%error, "state file unreadable: kept as .corrupt, empty state");
             let mut aside = path.as_os_str().to_owned();
             aside.push(".corrupt");
             // Si la mise de côté échoue, on ne supprime rien : l'ancien fichier sera

@@ -18,7 +18,7 @@ const SAME_LIGHT_DELTA: f64 = 0.15;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum CurveError {
     /// Le texte dépasse la taille permise ; aucune troncature silencieuse.
-    #[error("courbe trop longue pour la taille permise ({max} caractères)")]
+    #[error("curve too long for the allowed size ({max} characters)")]
     TooLong {
         /// Taille maximale demandée.
         max: usize,

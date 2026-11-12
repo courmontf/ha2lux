@@ -176,13 +176,13 @@ pub enum ApiError {
     #[error("{0}")]
     OutOfRange(String),
     /// Écran inconnu.
-    #[error("écran inconnu : {0}")]
+    #[error("unknown display: {0}")]
     UnknownDisplay(String),
     /// Écran indisponible.
-    #[error("écran indisponible : {0}")]
+    #[error("display unavailable: {0}")]
     DisplayUnavailable(String),
     /// Aucun écran contrôlable.
-    #[error("aucun écran contrôlable")]
+    #[error("no controllable display")]
     NoControllableDisplay,
     /// Preset inconnu ; le message liste les presets disponibles.
     #[error("{0}")]
@@ -197,7 +197,7 @@ pub enum ApiError {
     #[error("{0}")]
     Failed(String),
     /// Le démon s'arrête ou ne répond plus.
-    #[error("le démon est arrêté")]
+    #[error("the daemon is stopped")]
     Stopped,
 }
 

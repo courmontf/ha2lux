@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum HwError {
     /// Le maximum rapporté est nul : l'écran n'est pas contrôlable.
-    #[error("le maximum de luminosité rapporté par l'écran est nul")]
+    #[error("the brightness maximum reported by the display is zero")]
     ZeroMax,
 }
 

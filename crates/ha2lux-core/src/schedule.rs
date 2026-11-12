@@ -13,16 +13,16 @@ const DAY: i64 = 1440;
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ScheduleError {
     /// Heure mal formée : seul `HH:MM` strict (24 h) est accepté.
-    #[error("heure invalide « {0} » : format attendu HH:MM (00:00 à 23:59)")]
+    #[error("invalid time \"{0}\": expected format HH:MM (00:00 to 23:59)")]
     InvalidTime(String),
     /// Minute hors de `0..1440`.
-    #[error("minute du jour invalide : {0} (attendu 0 à 1439)")]
+    #[error("invalid minute of the day: {0} (expected 0 to 1439)")]
     MinuteOutOfRange(u16),
     /// Niveau hors de `0..=100`.
-    #[error("niveau invalide : {0} (attendu 0 à 100)")]
+    #[error("invalid level: {0} (expected 0 to 100)")]
     LevelOutOfRange(u8),
     /// Deux points à la même minute.
-    #[error("deux points à la même heure : {0}")]
+    #[error("two points at the same time: {0}")]
     DuplicateTime(MinuteOfDay),
     /// Trop de points.
     #[error("trop de points : {0} (maximum {MAX_POINTS})")]

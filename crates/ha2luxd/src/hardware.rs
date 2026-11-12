@@ -73,7 +73,7 @@ async fn probe_found(mut backend: AnyBackend, bus: Option<u32>, floor: u32) -> F
             floor,
         },
         Ok(Err(error)) => {
-            tracing::debug!(display = %backend.info().id, %error, "écran non contrôlable");
+            tracing::debug!(display = %backend.info().id, %error, "display not controllable");
             Found {
                 info: backend.info().clone(),
                 backend: None,
@@ -83,7 +83,7 @@ async fn probe_found(mut backend: AnyBackend, bus: Option<u32>, floor: u32) -> F
             }
         }
         Err(_) => {
-            tracing::debug!(display = %backend.info().id, "sonde sans réponse");
+            tracing::debug!(display = %backend.info().id, "probe got no reply");
             Found {
                 info: backend.info().clone(),
                 backend: None,
@@ -145,10 +145,10 @@ impl Hardware for SystemHardware {
             .await
             .unwrap_or_default();
             for note in &discovery.notes {
-                tracing::info!(%note, "découverte DDC");
+                tracing::info!(%note, "DDC discovery");
             }
             for (candidate, source) in discovery.candidates {
-                tracing::debug!(display = %candidate.info.id, bus = candidate.bus, ?source, "écran externe candidat");
+                tracing::debug!(display = %candidate.info.id, bus = candidate.bus, ?source, "external display candidate");
                 let backend = AnyBackend::Ddc(DdcBackend::new(
                     candidate.info.clone(),
                     candidate.bus,

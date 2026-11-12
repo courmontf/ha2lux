@@ -7,7 +7,7 @@ use thiserror::Error;
 /// Impossible de déterminer les répertoires.
 #[derive(Debug, Error)]
 #[error(
-    "impossible de déterminer les répertoires de configuration : ni XDG_CONFIG_HOME/XDG_STATE_HOME ni HOME ne sont définis"
+    "cannot determine the configuration directories: neither XDG_CONFIG_HOME/XDG_STATE_HOME nor HOME is set"
 )]
 pub struct PathsError;
 

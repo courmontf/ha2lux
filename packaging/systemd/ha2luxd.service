@@ -9,7 +9,7 @@
 # Environment=RUST_LOG=debug)
 
 [Unit]
-Description=ha2lux — réglage de la luminosité de tous les écrans
+Description=ha2lux — brightness control for all displays
 PartOf=graphical-session.target
 After=graphical-session.target
 # Redémarrages bornés : un démon qui échoue en boucle ne doit pas marteler les bus I²C.

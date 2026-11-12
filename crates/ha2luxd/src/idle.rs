@@ -87,7 +87,7 @@ pub async fn drive_events<S: IdleSource, B: Blockers>(
                 loop {
                     let report = blockers.probe().await;
                     if !report.reasons.is_empty() {
-                        tracing::debug!(reasons = ?report.reasons, "atténuation bloquée");
+                        tracing::debug!(reasons = ?report.reasons, "dimming blocked");
                     }
                     let probe = Event::IdleProbe {
                         idle_ms: threshold_ms.saturating_add(elapsed_ms(idle_since)),
@@ -162,7 +162,7 @@ where
         let settings_changed = async {
             loop {
                 if snapshots.changed().await.is_err() {
-                    return false; // le démon est arrêté
+                    return false; // the daemon is stopped
                 }
                 let snapshot = snapshots.borrow();
                 if (snapshot.idle_enabled, snapshot.idle_minutes) != (enabled, minutes) {

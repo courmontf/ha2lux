@@ -84,7 +84,7 @@ pub enum StartError {
     #[error(transparent)]
     Store(#[from] StoreError),
     /// Planning invalide (ne doit pas arriver après la validation).
-    #[error("planning invalide : {0}")]
+    #[error("invalid schedule: {0}")]
     Schedule(#[from] ScheduleError),
 }
 
@@ -233,12 +233,12 @@ impl Persister {
                 })
                 .await;
                 match result {
-                    Ok(Ok(())) => tracing::debug!(path = %path.display(), "fichier écrit"),
+                    Ok(Ok(())) => tracing::debug!(path = %path.display(), "file written"),
                     Ok(Err(error)) => {
-                        tracing::error!(path = %path.display(), %error, "écriture impossible")
+                        tracing::error!(path = %path.display(), %error, "write failed")
                     }
                     Err(error) => {
-                        tracing::error!(path = %path.display(), %error, "écriture interrompue")
+                        tracing::error!(path = %path.display(), %error, "write interrupted")
                     }
                 }
             }
@@ -355,12 +355,12 @@ pub async fn start(deps: Deps) -> Result<Daemon, StartError> {
         match loaded {
             ConfigLoad::Created(l) | ConfigLoad::Loaded(l) => {
                 for issue in &l.issues {
-                    tracing::warn!(key = %issue.path, "configuration : {}", issue.message);
+                    tracing::warn!(key = %issue.path, "configuration: {}", issue.message);
                 }
                 (l.config, None)
             }
             ConfigLoad::Invalid { error } => {
-                tracing::error!(%error, "configuration illisible : valeurs par défaut, fichier préservé et jamais réécrit");
+                tracing::error!(%error, "unreadable configuration: defaults used, file preserved and never rewritten");
                 (Config::default(), Some(error.to_string()))
             }
         }
@@ -370,7 +370,7 @@ pub async fn start(deps: Deps) -> Result<Daemon, StartError> {
         .await
         .unwrap_or_default();
     for issue in &loaded_state.issues {
-        tracing::warn!(key = %issue.path, "état : {}", issue.message);
+        tracing::warn!(key = %issue.path, "state: {}", issue.message);
     }
 
     let ranges: BTreeMap<DisplayId, Range> = config
@@ -482,7 +482,7 @@ impl Actor {
                             let result = self.dispatch(event);
                             self.force_writes = false;
                             if let Err(error) = result {
-                                tracing::debug!(%error, "événement sans effet");
+                                tracing::debug!(%error, "event had no effect");
                             }
                         }
                         Msg::Discovered { generation, found } => self.on_discovered(generation, found),
@@ -527,7 +527,7 @@ impl Actor {
             let now = self.deps.clock.now();
             match self.ctl.handle(now, event) {
                 Ok(commands) => self.execute(commands),
-                Err(error) => tracing::debug!(%error, "événement interne refusé"),
+                Err(error) => tracing::debug!(%error, "internal event refused"),
             }
         }
     }
@@ -561,18 +561,18 @@ impl Actor {
             Notice::LearnRefused { contradicted } => {
                 tracing::info!(
                     contradicted,
-                    "apprentissage refusé : trop de points contredits"
+                    "learning refused: too many contradicted points"
                 );
             }
             Notice::DisplayUnavailable(id) => {
-                tracing::warn!(display = %id, "écran indisponible après des échecs répétés");
+                tracing::warn!(display = %id, "display unavailable after repeated failures");
                 self.signal(Signal::DisplayFailed {
                     id: id.to_string(),
-                    reason: "écran indisponible".to_owned(),
+                    reason: "display unavailable".to_owned(),
                 });
             }
             Notice::ListRejected { retry_in_ms } => {
-                tracing::info!(retry_in_ms, "liste d'écrans factice rejetée");
+                tracing::info!(retry_in_ms, "fake display list rejected");
             }
         }
     }
@@ -610,7 +610,7 @@ impl Actor {
             level,
             raw,
             forced = self.force_writes,
-            "écriture demandée"
+            "write requested"
         );
         if self.force_writes {
             // Ré-application : l'écran a pu changer de lui-même, on réécrit même une valeur identique.
@@ -650,7 +650,7 @@ impl Actor {
                 error,
                 fatal,
             } => {
-                tracing::warn!(screen = %id, error = %error, fatal, "écriture matérielle en échec");
+                tracing::warn!(screen = %id, error = %error, fatal, "hardware write failed");
                 self.signal(Signal::DisplayFailed {
                     id: id.to_string(),
                     reason: error.to_string(),
@@ -667,7 +667,7 @@ impl Actor {
                 display: id,
                 duration,
             } => {
-                tracing::debug!(screen = %id, ?duration, "écritures gelées");
+                tracing::debug!(screen = %id, ?duration, "writes frozen");
             }
         }
         self.drain_queue();
@@ -720,7 +720,7 @@ impl Actor {
 
     /// Événement système : veille, réveil, verrouillage, hotplug.
     fn on_system(&mut self, event: SystemEvent) {
-        tracing::debug!(?event, "événement système");
+        tracing::debug!(?event, "system event");
         match event {
             SystemEvent::Suspend | SystemEvent::SessionActive(false) => {
                 self.suspended = true;
@@ -731,7 +731,7 @@ impl Actor {
                 self.rescan.set_suspended(false);
                 // Ré-application par priorité après rescan débouncé (le délai de 1,5 s vient de la machine d'états).
                 if let Err(error) = self.dispatch(Event::Wake) {
-                    tracing::debug!(%error, "réveil sans effet");
+                    tracing::debug!(%error, "wake-up had no effect");
                 }
             }
             SystemEvent::Lock => {}
@@ -744,7 +744,7 @@ impl Actor {
         if !self.rescan.is_current(generation) {
             tracing::debug!(
                 generation,
-                "résultat d'énumération périmé jeté (scan désavoué)"
+                "stale enumeration result discarded (scan disowned)"
             );
             return;
         }
@@ -762,7 +762,7 @@ impl Actor {
                 screen = %entry.id,
                 controllable = entry.controllable,
                 level_read = ?entry.level,
-                "énumération : niveau lu"
+                "enumeration: level read"
             );
         }
         let now = self.deps.clock.now();
@@ -783,13 +783,13 @@ impl Actor {
                 self.drain_queue();
                 self.force_writes = false;
             }
-            Err(error) => tracing::error!(%error, "liste d'écrans refusée"),
+            Err(error) => tracing::error!(%error, "display list refused"),
         }
         if !self.first_discovery_done {
             self.first_discovery_done = true;
             // Planning : valeur de l'heure courante tout de suite, sans attendre la minute suivante.
             if let Err(error) = self.dispatch(Event::PlanningTick) {
-                tracing::debug!(%error, "évaluation initiale du planning sans effet");
+                tracing::debug!(%error, "initial schedule evaluation had no effect");
             }
         }
         let waiting = self
@@ -932,7 +932,7 @@ impl Actor {
                 bytes: text.into_bytes(),
                 backup_first: false,
             }),
-            (Err(error), _) => tracing::error!(%error, "état non sérialisable"),
+            (Err(error), _) => tracing::error!(%error, "state not serializable"),
             (_, None) => {}
         }
     }
@@ -940,7 +940,7 @@ impl Actor {
     fn write_config(&mut self) {
         self.config_due = None;
         if let Some(error) = &self.config_error {
-            tracing::warn!(%error, "configuration illisible : réglages non enregistrés tant qu'elle n'est pas corrigée puis rechargée");
+            tracing::warn!(%error, "unreadable configuration: settings not saved until it is fixed and reloaded");
             return;
         }
         match (self.config.to_toml(), &self.persister) {
@@ -953,7 +953,7 @@ impl Actor {
                     backup_first,
                 });
             }
-            (Err(error), _) => tracing::error!(%error, "configuration non sérialisable"),
+            (Err(error), _) => tracing::error!(%error, "configuration not serializable"),
             (_, None) => {}
         }
     }
@@ -1006,7 +1006,7 @@ impl Actor {
             let token = match ha.tokens.get(&key).await {
                 Ok(token) => token,
                 Err(error) => {
-                    tracing::warn!(%error, "jeton Home Assistant illisible");
+                    tracing::warn!(%error, "Home Assistant token unreadable");
                     None
                 }
             };
@@ -1035,7 +1035,7 @@ impl Actor {
                         self.ha.source = Some(source);
                         self.ha.source_key = wanted;
                     }
-                    Err(error) => tracing::warn!(%error, "source Home Assistant non démarrée"),
+                    Err(error) => tracing::warn!(%error, "Home Assistant source not started"),
                 }
             }
         }
@@ -1273,14 +1273,14 @@ impl Actor {
             Ok(loaded) => loaded,
             Err(error) => {
                 let message = error.to_string();
-                tracing::error!(%message, "rechargement refusé : configuration précédente conservée");
+                tracing::error!(%message, "reload refused: previous configuration kept");
                 return Err(ApiError::ConfigInvalid(message));
             }
         };
         let cfg = controller_config(&loaded.config, self.auto_configured())
             .map_err(|e| ApiError::ConfigInvalid(e.to_string()))?;
         for issue in &loaded.issues {
-            tracing::warn!(key = %issue.path, "configuration : {}", issue.message);
+            tracing::warn!(key = %issue.path, "configuration: {}", issue.message);
         }
         self.config = loaded.config;
         self.config_error = None;

@@ -33,9 +33,9 @@ pub fn parse_logind_inhibitors(list: &[Inhibitor], own_pid: u32) -> Vec<String> 
         })
         .map(|(_, who, why, _, _, _)| {
             if why.is_empty() {
-                format!("inhibiteur d'inactivité : {who}")
+                format!("idle inhibitor: {who}")
             } else {
-                format!("inhibiteur d'inactivité : {who} ({why})")
+                format!("idle inhibitor: {who} ({why})")
             }
         })
         .collect()
@@ -87,10 +87,10 @@ pub fn parse_pw_dump(json: &str) -> Vec<String> {
     }
     let mut reasons = Vec::new();
     if microphone {
-        reasons.push("microphone en cours d'utilisation".to_owned());
+        reasons.push("microphone in use".to_owned());
     }
     if camera {
-        reasons.push("caméra en cours d'utilisation".to_owned());
+        reasons.push("camera in use".to_owned());
     }
     reasons
 }
@@ -122,7 +122,7 @@ pub fn scan_video_users(proc_dir: &Path, own_pid: u32) -> Vec<String> {
             .any(|target| target.to_str().is_some_and(|t| t.starts_with("/dev/video")));
         if uses_camera {
             let name = std::fs::read_to_string(entry.path().join("comm")).unwrap_or_default();
-            users.push(format!("caméra ouverte par {}", name.trim()));
+            users.push(format!("camera opened by {}", name.trim()));
         }
     }
     users.sort();
@@ -216,12 +216,12 @@ impl SystemBlockers {
             if let Ok(proxy) = PowerInhibitProxy::new(connection).await
                 && proxy.has_inhibit().await.unwrap_or(false)
             {
-                reasons.push("inhibiteur d'inactivité du bureau (PowerManagement)".to_owned());
+                reasons.push("desktop idle inhibitor (PowerManagement)".to_owned());
             }
             if let Ok(proxy) = GnomeSessionProxy::new(connection).await
                 && proxy.is_inhibited(8).await.unwrap_or(false)
             {
-                reasons.push("inhibiteur d'inactivité de GNOME".to_owned());
+                reasons.push("GNOME idle inhibitor".to_owned());
             }
             reasons
         };
@@ -249,7 +249,7 @@ impl SystemBlockers {
                 parse_pw_dump(&String::from_utf8_lossy(&output.stdout))
             }
             Ok(Err(error)) if error.kind() == std::io::ErrorKind::NotFound => {
-                tracing::info!("pw-dump introuvable : micro et caméra PipeWire non surveillés");
+                tracing::info!("pw-dump not found: PipeWire microphone and camera not monitored");
                 self.pw_missing = true;
                 Vec::new()
             }

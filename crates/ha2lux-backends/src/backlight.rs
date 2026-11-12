@@ -75,7 +75,7 @@ pub async fn scan(root: &Path) -> Vec<BacklightInfo> {
             .await
             .filter(|m| *m > 0)
         else {
-            tracing::debug!(%name, "rétroéclairage ignoré : max_brightness illisible ou nul");
+            tracing::debug!(%name, "backlight ignored: max_brightness unreadable or zero");
             continue;
         };
         let kind = tokio::fs::read_to_string(path.join("type"))
@@ -157,7 +157,7 @@ impl<S: BrightnessSetter> DisplayBackend for BacklightBackend<S> {
             }
         }
         Err(BackendError::Disconnected(
-            "luminosité illisible".to_owned(),
+            "brightness unreadable".to_owned(),
         ))
     }
 
@@ -283,7 +283,7 @@ impl LogindSetter {
         let connection = self
             .connection
             .clone()
-            .ok_or_else(|| BackendError::Transient("bus système indisponible".to_owned()))?;
+            .ok_or_else(|| BackendError::Transient("system bus unavailable".to_owned()))?;
         if let Some(path) = &self.session {
             return Ok((connection, path.clone()));
         }

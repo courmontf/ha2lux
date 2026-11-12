@@ -252,7 +252,7 @@ pub async fn run(options: AppOptions) -> Result<(), AppError> {
                 flush_at = None;
                 if let Some(delta) = wheel.take(step) {
                     if let Err(error) = proxy.step_master(delta).await {
-                        tracing::debug!(%error, "molette refusée par le démon");
+                        tracing::debug!(%error, "wheel step refused by the daemon");
                     }
                     if let (Some(osd), Ok(master)) = (osd.as_mut(), proxy.master().await)
                         && let Ok(master) = u8::try_from(master)
@@ -306,13 +306,13 @@ async fn run_action(proxy: &DaemonProxy<'_>, config_file: &std::path::Path, acti
                 .arg(config_file)
                 .spawn()
             {
-                tracing::warn!(%error, "xdg-open impossible");
+                tracing::warn!(%error, "xdg-open failed");
             }
             Ok(())
         }
         Action::MenuOpened | Action::Quit => Ok(()),
     };
     if let Err(error) = result {
-        tracing::warn!(%error, "commande refusée par le démon");
+        tracing::warn!(%error, "command refused by the daemon");
     }
 }

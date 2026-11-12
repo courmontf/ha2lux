@@ -3,18 +3,24 @@
 
 use ha2lux_core::config::Config;
 
-#[test]
-fn readme_example_config_parses_without_issues() {
-    let readme =
-        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../README.md")).unwrap();
+/// Vérifie l'exemple de configuration d'un README (les deux langues).
+fn check(file: &str, entity: &str) {
+    let path = format!("{}/../../{file}", env!("CARGO_MANIFEST_DIR"));
+    let readme = std::fs::read_to_string(path).unwrap();
     let block = readme
         .split("```toml\n")
         .nth(1)
         .and_then(|rest| rest.split("```").next())
         .expect("bloc toml dans le README");
     let loaded = Config::parse(block).unwrap();
-    assert!(loaded.issues.is_empty(), "{:?}", loaded.issues);
-    assert_eq!(loaded.config.presets.len(), 2);
-    assert_eq!(loaded.config.schedule.points.len(), 2);
-    assert_eq!(loaded.config.auto.entity, "sensor.salon_illuminance");
+    assert!(loaded.issues.is_empty(), "{file} : {:?}", loaded.issues);
+    assert_eq!(loaded.config.presets.len(), 2, "{file}");
+    assert_eq!(loaded.config.schedule.points.len(), 2, "{file}");
+    assert_eq!(loaded.config.auto.entity, entity, "{file}");
+}
+
+#[test]
+fn readme_example_config_parses_without_issues() {
+    check("README.md", "sensor.living_room_illuminance");
+    check("README.fr.md", "sensor.salon_illuminance");
 }

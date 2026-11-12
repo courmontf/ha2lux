@@ -31,22 +31,22 @@ const OPCODE_SET_VCP: u8 = 0x03;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum DdcError {
     /// Réponse trop courte pour être analysée.
-    #[error("réponse DDC/CI trop courte ({0} octets)")]
+    #[error("DDC/CI response too short ({0} bytes)")]
     TooShort(usize),
     /// L'écran répond « null message » : pas prêt, à réessayer.
-    #[error("l'écran répond « null message » (pas prêt)")]
+    #[error("the display answers \"null message\" (not ready)")]
     NullMessage,
     /// Somme de contrôle invalide.
-    #[error("somme de contrôle DDC/CI invalide")]
+    #[error("invalid DDC/CI checksum")]
     BadChecksum,
     /// Trame inattendue (adresse, longueur ou opcode).
     #[error("trame DDC/CI inattendue")]
     UnexpectedFrame,
     /// La réponse concerne un autre code VCP que celui demandé.
-    #[error("réponse pour un autre code VCP (0x{0:02X})")]
+    #[error("response for another VCP code (0x{0:02X})")]
     WrongVcp(u8),
     /// L'écran ne prend pas en charge ce code VCP.
-    #[error("code VCP non pris en charge par l'écran")]
+    #[error("VCP code not supported by the display")]
     UnsupportedVcp,
 }
 

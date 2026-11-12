@@ -127,7 +127,7 @@ async fn zero_max_is_not_controllable() {
     let (mut backend, _, _) = setup(0, 0);
     let error = backend.probe().await.unwrap_err();
     assert!(
-        matches!(error, BackendError::Invalid(ref m) if m.contains("nul")),
+        matches!(error, BackendError::Invalid(ref m) if m.contains("zero")),
         "{error}"
     );
 }
@@ -274,7 +274,7 @@ async fn abandoned_operation_keeps_bus_locked_and_blocks_reuse_until_it_ends() {
     // Même écran : refus immédiat, aucun second thread empilé.
     let again = hung.read().await.unwrap_err();
     assert!(
-        matches!(&again, BackendError::Transient(m) if m.contains("précédente")),
+        matches!(&again, BackendError::Transient(m) if m.contains("previous")),
         "{again}"
     );
     // Autre écran sur le même bus : le verrou est toujours tenu.
@@ -296,7 +296,7 @@ async fn abandoned_operation_keeps_bus_locked_and_blocks_reuse_until_it_ends() {
                 recovered = true;
                 break;
             }
-            Err(BackendError::Transient(m)) if m.contains("précédente") => {
+            Err(BackendError::Transient(m)) if m.contains("previous") => {
                 tokio::task::yield_now().await
             }
             Err(other) => panic!("erreur inattendue : {other}"),

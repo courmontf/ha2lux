@@ -88,7 +88,7 @@ impl Osd {
             .await
         {
             Ok(id) => self.last_id = id,
-            Err(error) => tracing::debug!(%error, "notification de niveau impossible"),
+            Err(error) => tracing::debug!(%error, "level notification failed"),
         }
     }
 }

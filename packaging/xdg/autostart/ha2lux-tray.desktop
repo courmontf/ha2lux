@@ -1,7 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=ha2lux
-Comment=Luminosité de tous les écrans
+Comment=Brightness of all displays
+Comment[fr]=Luminosité de tous les écrans
 Exec=/usr/bin/ha2lux-tray
 Icon=display-brightness-symbolic
 Terminal=false

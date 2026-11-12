@@ -71,8 +71,8 @@ fn logind_only_idle_block_inhibitors_count() {
     assert_eq!(
         reasons,
         [
-            "inhibiteur d'inactivité : mpv (Playing video)",
-            "inhibiteur d'inactivité : Firefox"
+            "idle inhibitor: mpv (Playing video)",
+            "idle inhibitor: Firefox"
         ]
     );
 }
@@ -95,7 +95,7 @@ fn pipewire_dump_detects_microphone_and_camera_in_use() {
     );
     assert_eq!(
         parse_pw_dump(&dump(&[node("Audio/Source", "running", "")])),
-        ["microphone en cours d'utilisation"]
+        ["microphone in use"]
     );
     assert_eq!(
         parse_pw_dump(&dump(&[node(
@@ -103,27 +103,21 @@ fn pipewire_dump_detects_microphone_and_camera_in_use() {
             "running",
             r#","application.name":"Zoom""#
         )])),
-        ["microphone en cours d'utilisation"]
+        ["microphone in use"]
     );
     assert_eq!(
         parse_pw_dump(&dump(&[node("Video/Source", "running", "")])),
-        ["caméra en cours d'utilisation"]
+        ["camera in use"]
     );
     assert_eq!(
         parse_pw_dump(&dump(&[node("Stream/Input/Video", "running", "")])),
-        ["caméra en cours d'utilisation"]
+        ["camera in use"]
     );
     let both = parse_pw_dump(&dump(&[
         node("Audio/Source", "running", ""),
         node("Video/Source", "running", ""),
     ]));
-    assert_eq!(
-        both,
-        [
-            "microphone en cours d'utilisation",
-            "caméra en cours d'utilisation"
-        ]
-    );
+    assert_eq!(both, ["microphone in use", "camera in use"]);
     // Lecture de musique (sortie) : pas un blocage.
     assert!(
         parse_pw_dump(&dump(&[
@@ -201,7 +195,7 @@ fn camera_opened_directly_through_v4l2_is_detected_from_proc() {
     std::fs::write(proc.path().join("version"), "x").unwrap();
     assert_eq!(
         scan_video_users(proc.path(), 42),
-        ["caméra ouverte par obs", "caméra ouverte par zoom"]
+        ["camera opened by obs", "camera opened by zoom"]
     );
     assert!(scan_video_users(std::path::Path::new("/nonexistent/proc"), 1).is_empty());
 }
@@ -341,7 +335,7 @@ async fn logind_inhibitors_are_read_over_dbus() {
     });
     let report = blockers.probe().await;
     assert!(report.blocked());
-    assert_eq!(report.reasons, ["inhibiteur d'inactivité : mpv (Playing)"]);
+    assert_eq!(report.reasons, ["idle inhibitor: mpv (Playing)"]);
 }
 
 #[tokio::test]
@@ -416,10 +410,7 @@ async fn pw_dump_output_is_parsed_from_a_real_process() {
         pw_dump: Some(script),
         ..BlockerOptions::default()
     });
-    assert_eq!(
-        blockers.probe().await.reasons,
-        ["microphone en cours d'utilisation"]
-    );
+    assert_eq!(blockers.probe().await.reasons, ["microphone in use"]);
 }
 
 #[tokio::test]

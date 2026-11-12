@@ -158,7 +158,7 @@ fn ambiguous_identical_edids_are_refused() {
         discovery
             .notes
             .iter()
-            .filter(|n| n.contains("ambiguë"))
+            .filter(|n| n.contains("ambiguous"))
             .count(),
         2
     );
@@ -178,7 +178,7 @@ fn unmatched_connector_is_reported_and_internal_panels_are_ignored() {
         discovery
             .notes
             .iter()
-            .any(|n| n.starts_with("DP-1") && n.contains("aucun adaptateur")),
+            .any(|n| n.starts_with("DP-1") && n.contains("no GPU adapter")),
         "{:?}",
         discovery.notes
     );
@@ -197,5 +197,5 @@ fn invalid_edid_on_a_gpu_bus_is_noted_not_fatal() {
     opener.add_edid(1, vec![0xAB; 128]);
     let discovery = discover_external(root.path(), &opener, true);
     assert!(discovery.candidates.is_empty());
-    assert!(discovery.notes.iter().any(|n| n.contains("EDID invalide")));
+    assert!(discovery.notes.iter().any(|n| n.contains("invalid EDID")));
 }

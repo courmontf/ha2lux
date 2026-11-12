@@ -88,7 +88,7 @@ pub enum ServiceError {
     #[error("{0}")]
     Takeover(String),
     /// Démarrage du démon impossible.
-    #[error("démarrage impossible : {0}")]
+    #[error("startup failed: {0}")]
     Start(#[from] StartError),
 }
 
@@ -204,19 +204,19 @@ async fn make_room(connection: &zbus::Connection, timeout: Duration) -> Result<(
     if !dbus.name_has_owner(name.clone()).await? {
         return Ok(());
     }
-    tracing::info!("une autre instance est active : demande de sortie");
+    tracing::info!("another instance is running: asking it to exit");
     let proxy = DaemonProxy::new(connection).await?;
     // L'ancienne instance peut être figée ou d'une autre version : l'appel est borné.
     match tokio::time::timeout(timeout, proxy.quit()).await {
         Ok(Ok(())) => {}
-        Ok(Err(error)) => tracing::warn!(%error, "la demande de sortie a échoué"),
-        Err(_) => tracing::warn!("la demande de sortie est restée sans réponse"),
+        Ok(Err(error)) => tracing::warn!(%error, "the exit request failed"),
+        Err(_) => tracing::warn!("the exit request got no reply"),
     }
     let deadline = Instant::now() + timeout;
     while dbus.name_has_owner(name.clone()).await? {
         if Instant::now() >= deadline {
             return Err(ServiceError::Takeover(format!(
-                "l'instance en cours n'a pas libéré {BUS_NAME} en {} s : démarrage refusé (jamais deux démons sur un bus DDC)",
+                "the running instance did not release {BUS_NAME} within {} s: startup refused (never two daemons on a DDC bus)",
                 timeout.as_secs_f32()
             )));
         }
@@ -262,10 +262,10 @@ pub async fn run(
     ) {
         daemon.shutdown().await;
         return Err(ServiceError::Takeover(format!(
-            "{BUS_NAME} a été pris par une autre instance pendant le démarrage ({reply})"
+            "{BUS_NAME} was taken by another instance during startup ({reply})"
         )));
     }
-    tracing::info!(name = BUS_NAME, "service D-Bus prêt");
+    tracing::info!(name = BUS_NAME, "D-Bus service ready");
 
     let pump = tokio::spawn(pump_signals(connection.clone(), signals_rx));
     let mut watchers = spawn_system_sources(&options.system, &handle).await;
@@ -273,14 +273,14 @@ pub async fn run(
         watchers.push(spawn_idle(&options.idle, &connection, &handle).await);
     }
     tokio::select! {
-        () = shutdown => tracing::info!("arrêt demandé"),
-        () = handle.wait_closed() => tracing::info!("arrêt demandé par D-Bus (Quit)"),
+        () = shutdown => tracing::info!("shutdown requested"),
+        () = handle.wait_closed() => tracing::info!("shutdown requested over D-Bus (Quit)"),
     }
     // État écrit et tâches d'écran arrêtées AVANT de libérer le nom : le successeur ne
     // démarre qu'ensuite, donc jamais deux démons sur le matériel.
     daemon.shutdown().await;
     if let Err(error) = connection.release_name(BUS_NAME).await {
-        tracing::warn!(%error, "libération du nom D-Bus");
+        tracing::warn!(%error, "releasing the D-Bus name");
     }
     pump.abort();
     for watcher in watchers {
@@ -302,12 +302,12 @@ async fn spawn_system_sources(
                 let (handle, session_id) = (handle.clone(), system.session_id.clone());
                 tasks.push(tokio::spawn(async move {
                     if let Err(error) = watch_logind(connection, session_id, handle).await {
-                        tracing::warn!(%error, "surveillance logind arrêtée");
+                        tracing::warn!(%error, "logind monitoring stopped");
                     }
                 }));
             }
             Err(error) => {
-                tracing::warn!(%error, "logind inaccessible : veille et verrouillage non surveillés")
+                tracing::warn!(%error, "logind unreachable: sleep and lock not monitored")
             }
         }
     }
@@ -315,7 +315,7 @@ async fn spawn_system_sources(
         let (handle, poll_dir) = (handle.clone(), system.poll_dir.clone());
         tasks.push(tokio::spawn(async move {
             if let Err(error) = watch_uevents(handle.clone()).await {
-                tracing::warn!(%error, "netlink indisponible : repli par sondage de sysfs toutes les 3 s");
+                tracing::warn!(%error, "netlink unavailable: falling back to polling sysfs every 3 s");
                 if let Some(dir) = poll_dir {
                     poll_connectors(dir, handle, Duration::from_secs(3)).await;
                 }
@@ -333,7 +333,12 @@ async fn spawn_idle(
     handle: &crate::actor::DaemonHandle,
 ) -> tokio::task::JoinHandle<()> {
     let system = match &idle.system_bus {
-        Some(bus) => connect(bus).await.map_err(|error| tracing::warn!(%error, "bus système inaccessible : inhibiteurs logind ignorés")).ok(),
+        Some(bus) => connect(bus)
+            .await
+            .map_err(
+                |error| tracing::warn!(%error, "system bus unreachable: logind inhibitors ignored"),
+            )
+            .ok(),
         None => None,
     };
     let blockers = BlockerOptions {
@@ -353,10 +358,7 @@ async fn spawn_idle(
                 let timeout = u32::try_from(threshold_ms).unwrap_or(u32::MAX);
                 match tokio::task::spawn_blocking(move || WaylandIdle::connect(timeout)).await {
                     Ok(Ok(mut source)) => {
-                        tracing::info!(
-                            threshold_ms,
-                            "atténuation : source Wayland ext-idle-notify-v1"
-                        );
+                        tracing::info!(threshold_ms, "dimming: Wayland source ext-idle-notify-v1");
                         drive_events(
                             &handle,
                             &mut source,
@@ -368,15 +370,15 @@ async fn spawn_idle(
                         return;
                     }
                     Ok(Err(error)) => {
-                        tracing::warn!(%error, "source d'inactivité Wayland indisponible")
+                        tracing::warn!(%error, "Wayland idle source unavailable")
                     }
-                    Err(error) => tracing::warn!(%error, "source d'inactivité Wayland interrompue"),
+                    Err(error) => tracing::warn!(%error, "Wayland idle source interrupted"),
                 }
             }
             if let Some(connection) = mutter {
                 tracing::info!(
                     threshold_ms,
-                    "atténuation : repli sur GNOME Mutter (sondage)"
+                    "dimming: falling back to GNOME Mutter (polling)"
                 );
                 let mut time = MutterIdleTime::new(connection);
                 drive_polled(
@@ -389,9 +391,7 @@ async fn spawn_idle(
                 .await;
                 return;
             }
-            tracing::warn!(
-                "aucune source d'inactivité disponible : l'atténuation ne fonctionnera pas"
-            );
+            tracing::warn!("no idle source available: dimming will not work");
         }
     }))
 }

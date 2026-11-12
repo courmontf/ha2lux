@@ -111,7 +111,7 @@ pub fn discover_external(root: &Path, opener: &dyn I2cOpener, resolve_by_edid: b
                 match read_edid(opener, adapter.bus).map(|raw| Edid::parse(&raw)) {
                     Ok(Ok(edid)) => on_bus.push((adapter.bus, edid.fingerprint)),
                     Ok(Err(error)) => {
-                        notes.push(format!("i2c-{} : EDID invalide ({error})", adapter.bus))
+                        notes.push(format!("i2c-{}: invalid EDID ({error})", adapter.bus))
                     }
                     Err(_) => {} // aucun écran sur ce port
                 }
@@ -140,11 +140,11 @@ pub fn discover_external(root: &Path, opener: &dyn I2cOpener, resolve_by_edid: b
                         sources.push((connectors[i].name.clone(), BusSource::EdidOverI2c));
                     }
                     ([], _) => notes.push(format!(
-                        "{} : aucun adaptateur GPU ne présente son EDID (association impossible)",
+                        "{}: no GPU adapter presents its EDID (matching impossible)",
                         connectors[i].name
                     )),
                     _ => notes.push(format!(
-                        "{} : association ambiguë (plusieurs écrans ou bus à l'EDID identique), refusée",
+                        "{}: ambiguous matching (several displays or buses with the same EDID), refused",
                         connectors[i].name
                     )),
                 }

@@ -34,7 +34,7 @@ pub const MAX_ENTITY_LEN: usize = 127;
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ConfigError {
     /// Syntaxe TOML invalide.
-    #[error("configuration illisible (ligne {line}) : {message}")]
+    #[error("unreadable configuration (line {line}): {message}")]
     Syntax {
         /// Ligne approximative de l'erreur (1 si inconnue).
         line: usize,
@@ -50,7 +50,7 @@ pub enum ConfigError {
         supported: u32,
     },
     /// Échec de sérialisation.
-    #[error("sérialisation impossible : {0}")]
+    #[error("serialization failed: {0}")]
     Serialize(String),
 }
 
@@ -376,7 +376,7 @@ impl Reader {
                 self.note(
                     Severity::Warning,
                     path,
-                    "entier attendu, valeur par défaut utilisée",
+                    "integer expected, default value used",
                 );
                 default
             }
@@ -399,7 +399,7 @@ impl Reader {
                 self.note(
                     Severity::Warning,
                     path,
-                    "nombre attendu, valeur par défaut utilisée",
+                    "number expected, default value used",
                 );
                 return default;
             }
@@ -424,7 +424,7 @@ impl Reader {
                 self.note(
                     Severity::Warning,
                     path,
-                    "booléen attendu, valeur par défaut utilisée",
+                    "boolean expected, default value used",
                 );
                 default
             }
@@ -444,11 +444,7 @@ impl Reader {
                 String::new()
             }
             Some(_) => {
-                self.note(
-                    Severity::Warning,
-                    path,
-                    "texte attendu, valeur par défaut utilisée",
-                );
+                self.note(Severity::Warning, path, "text expected, default value used");
                 String::new()
             }
         }
@@ -466,7 +462,7 @@ impl Reader {
             None => empty,
             Some(Value::Table(t)) => t,
             Some(_) => {
-                self.note(Severity::Warning, path, "table attendue, section ignorée");
+                self.note(Severity::Warning, path, "table expected, section ignored");
                 empty
             }
         }
@@ -479,7 +475,7 @@ impl Reader {
             } else {
                 format!("{path}.{key}")
             };
-            self.note(Severity::Info, &full, "clé inconnue, ignorée");
+            self.note(Severity::Info, &full, "unknown key, ignored");
         }
     }
 }
@@ -489,7 +485,7 @@ fn read_presets(r: &mut Reader, value: &Value) -> Vec<Preset> {
         r.note(
             Severity::Warning,
             "presets",
-            "table attendue, presets par défaut utilisés",
+            "table expected, default presets used",
         );
         return Config::default().presets;
     };
@@ -509,9 +505,7 @@ fn read_presets(r: &mut Reader, value: &Value) -> Vec<Preset> {
             r.note(
                 Severity::Warning,
                 "presets",
-                format!(
-                    "nom de preset invalide (1 à {MAX_PRESET_NAME} caractères), entrée rejetée"
-                ),
+                format!("invalid preset name (1 to {MAX_PRESET_NAME} characters), entry rejected"),
             );
             continue;
         }
@@ -521,7 +515,7 @@ fn read_presets(r: &mut Reader, value: &Value) -> Vec<Preset> {
             r.note(
                 Severity::Warning,
                 &path,
-                "nom déjà utilisé (insensible à la casse), entrée ignorée",
+                "name already used (case-insensitive), entry ignored",
             );
             continue;
         }
@@ -529,7 +523,7 @@ fn read_presets(r: &mut Reader, value: &Value) -> Vec<Preset> {
             r.note(
                 Severity::Warning,
                 &path,
-                "niveau entier attendu, entrée rejetée",
+                "integer level expected, entry rejected",
             );
             continue;
         };
@@ -549,11 +543,7 @@ fn read_range(r: &mut Reader, path: &str, value: Option<&Value>) -> Range {
             [Value::Integer(low), Value::Integer(high)] => {
                 let range = Range::normalized(*low, *high);
                 if i64::from(range.low()) != *low || i64::from(range.high()) != *high {
-                    r.note(
-                        Severity::Info,
-                        path,
-                        "plage normalisée (largeur minimale 20)",
-                    );
+                    r.note(Severity::Info, path, "range normalized (minimum width 20)");
                 }
                 range
             }
@@ -561,7 +551,7 @@ fn read_range(r: &mut Reader, path: &str, value: Option<&Value>) -> Range {
                 r.note(
                     Severity::Warning,
                     path,
-                    "plage [bas, haut] d'entiers attendue, (0, 100) utilisée",
+                    "range [low, high] of integers expected, (0, 100) used",
                 );
                 Range::FULL
             }
@@ -570,7 +560,7 @@ fn read_range(r: &mut Reader, path: &str, value: Option<&Value>) -> Range {
             r.note(
                 Severity::Warning,
                 path,
-                "plage [bas, haut] attendue, (0, 100) utilisée",
+                "range [low, high] expected, (0, 100) used",
             );
             Range::FULL
         }
@@ -582,7 +572,7 @@ fn read_displays(r: &mut Reader, value: &Value) -> Vec<DisplayEntry> {
         r.note(
             Severity::Warning,
             "displays",
-            "table attendue, section ignorée",
+            "table expected, section ignored",
         );
         return Vec::new();
     };
@@ -598,14 +588,14 @@ fn read_displays(r: &mut Reader, value: &Value) -> Vec<DisplayEntry> {
             continue;
         }
         let Value::Table(entry) = entry else {
-            r.note(Severity::Warning, &path, "table attendue, entrée ignorée");
+            r.note(Severity::Warning, &path, "table expected, entry ignored");
             continue;
         };
         if id.is_empty() {
             r.note(
                 Severity::Warning,
                 "displays",
-                "identifiant d'écran vide, entrée ignorée",
+                "empty display identifier, entry ignored",
             );
             continue;
         }
@@ -635,7 +625,7 @@ fn read_points(r: &mut Reader, value: Option<&Value>) -> Vec<Point> {
             r.note(
                 Severity::Warning,
                 "schedule.points",
-                "liste de points attendue, planning vidé",
+                "list of points expected, schedule emptied",
             );
             return Vec::new();
         }
@@ -655,7 +645,7 @@ fn read_points(r: &mut Reader, value: Option<&Value>) -> Vec<Point> {
             r.note(
                 Severity::Warning,
                 &path,
-                "point {time, level} attendu, ignoré",
+                "point {time, level} expected, ignored",
             );
             continue;
         };
@@ -667,7 +657,7 @@ fn read_points(r: &mut Reader, value: Option<&Value>) -> Vec<Point> {
             r.note(
                 Severity::Warning,
                 &path,
-                "heure HH:MM invalide, point ignoré",
+                "invalid HH:MM time, point ignored",
             );
             continue;
         };
@@ -675,7 +665,7 @@ fn read_points(r: &mut Reader, value: Option<&Value>) -> Vec<Point> {
             r.note(
                 Severity::Warning,
                 &path,
-                "niveau entier attendu, point ignoré",
+                "integer level expected, point ignored",
             );
             continue;
         }
@@ -683,7 +673,7 @@ fn read_points(r: &mut Reader, value: Option<&Value>) -> Vec<Point> {
             r.note(
                 Severity::Warning,
                 &path,
-                "heure déjà utilisée par un autre point, point ignoré",
+                "time already used by another point, point ignored",
             );
             continue;
         }
@@ -808,7 +798,7 @@ fn read_auto(r: &mut Reader, table: &Table) -> AutoConfig {
         r.note(
             Severity::Warning,
             "auto.token",
-            "jeton ignoré : il ne se stocke pas dans ce fichier mais dans le trousseau",
+            "token ignored: it is not stored in this file but in the keyring",
         );
     }
     let mut auto = AutoConfig {
@@ -841,7 +831,7 @@ fn read_auto(r: &mut Reader, table: &Table) -> AutoConfig {
                     r.note(
                         Severity::Warning,
                         "auto.url",
-                        "http hors réseau local : le jeton circulerait en clair",
+                        "http outside the local network: the token would travel in clear text",
                     );
                 }
                 auto.url = checked.url;
@@ -857,7 +847,7 @@ fn read_auto(r: &mut Reader, table: &Table) -> AutoConfig {
             r.note(
                 Severity::Warning,
                 "auto.entity",
-                "identifiant d'entité invalide (attendu : domaine.objet), ignoré",
+                "invalid entity identifier (expected: domain.object), ignored",
             );
         }
     }
@@ -865,7 +855,7 @@ fn read_auto(r: &mut Reader, table: &Table) -> AutoConfig {
         r.note(
             Severity::Warning,
             "auto.enabled",
-            "l'auto-luminosité exige une URL et une entité valides, désactivée",
+            "auto-brightness requires a valid URL and entity, disabled",
         );
         auto.enabled = false;
     }
@@ -898,7 +888,7 @@ impl Config {
                 r.note(
                     Severity::Warning,
                     "version",
-                    "entier attendu, version courante supposée",
+                    "integer expected, current version assumed",
                 );
                 i64::from(CONFIG_VERSION)
             }

@@ -107,7 +107,7 @@ fn perform(
     }
     let result = match state.device.as_mut() {
         Some(device) => transact(device.as_mut(), timings, op),
-        None => Err(BackendError::Disconnected("bus I²C fermé".to_owned())),
+        None => Err(BackendError::Disconnected("I²C bus closed".to_owned())),
     };
     state.last_done = Some(Instant::now());
     if matches!(result, Err(BackendError::Disconnected(_))) {
@@ -181,7 +181,7 @@ impl DdcBackend {
     async fn run(&self, op: Op) -> Result<Option<VcpReading>, BackendError> {
         if self.busy.load(Ordering::Acquire) {
             return Err(BackendError::Transient(
-                "opération précédente toujours en cours sur ce bus".to_owned(),
+                "previous operation still running on this bus".to_owned(),
             ));
         }
         let guard = Arc::clone(&self.bus_lock).lock_owned().await;
@@ -215,7 +215,7 @@ impl DdcBackend {
         for attempt in 0..attempts.max(1) {
             match self.run(Op::Get(VCP_BRIGHTNESS)).await {
                 Ok(Some(reading)) => return Ok(reading),
-                Ok(None) => return Err(BackendError::Invalid("réponse vide".to_owned())),
+                Ok(None) => return Err(BackendError::Invalid("empty response".to_owned())),
                 Err(error) if error.is_transient() => {
                     last = error;
                     if attempt + 1 < attempts && !self.timings.retry_delay.is_zero() {
@@ -240,7 +240,7 @@ impl DisplayBackend for DdcBackend {
         let reading = self.get_with_retries(self.timings.read_attempts).await?;
         if reading.maximum == 0 {
             return Err(BackendError::Invalid(
-                "maximum de luminosité nul".to_owned(),
+                "brightness maximum is zero".to_owned(),
             ));
         }
         self.info.max = u32::from(reading.maximum);
@@ -256,7 +256,7 @@ impl DisplayBackend for DdcBackend {
     async fn write(&mut self, raw: u32) -> Result<(), BackendError> {
         if self.info.max == 0 {
             return Err(BackendError::Invalid(
-                "écran non sondé (maximum inconnu)".to_owned(),
+                "display not probed (maximum unknown)".to_owned(),
             ));
         }
         if raw > self.info.max {

@@ -58,7 +58,7 @@ fn read_suspension(value: &Value, issues: &mut Vec<ConfigIssue>) -> Option<Suspe
     let Value::Table(table) = value else {
         issues.push(issue(
             "suspension",
-            "table {start, resume} attendue, ignorée",
+            "table {start, resume} expected, ignored",
         ));
         return None;
     };
@@ -69,10 +69,7 @@ fn read_suspension(value: &Value, issues: &mut Vec<ConfigIssue>) -> Option<Suspe
     match (time("start"), time("resume")) {
         (Some(start), Some(resume)) => Some(Suspension::from_parts(start, resume)),
         _ => {
-            issues.push(issue(
-                "suspension",
-                "heures HH:MM invalides, suspension ignorée",
-            ));
+            issues.push(issue("suspension", "invalid HH:MM times, pause ignored"));
             None
         }
     }
@@ -109,7 +106,7 @@ impl State {
             None => None,
             Some(Value::Integer(m)) if (0..=100).contains(m) => u8::try_from(*m).ok(),
             Some(_) => {
-                issues.push(issue("master", "entier 0-100 attendu, ignoré"));
+                issues.push(issue("master", "integer 0-100 expected, ignored"));
                 None
             }
         };
@@ -120,7 +117,7 @@ impl State {
             None => Curve::new(),
             Some(Value::String(text)) => Curve::parse(text),
             Some(_) => {
-                issues.push(issue("curve", "texte lux:niveau,… attendu, ignoré"));
+                issues.push(issue("curve", "text lux:level,… expected, ignored"));
                 Curve::new()
             }
         };
@@ -130,7 +127,7 @@ impl State {
             }
             None => None,
             Some(_) => {
-                issues.push(issue("last_display", "identifiant invalide, ignoré"));
+                issues.push(issue("last_display", "invalid identifier, ignored"));
                 None
             }
         };

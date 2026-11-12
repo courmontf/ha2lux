@@ -56,19 +56,19 @@ pub struct DisplayInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum BackendError {
     /// Échec passager : on peut réessayer.
-    #[error("échec transitoire : {0}")]
+    #[error("transient failure: {0}")]
     Transient(String),
     /// Aucune réponse dans le délai imparti.
-    #[error("délai dépassé")]
+    #[error("timed out")]
     Timeout,
     /// L'écran n'est plus joignable (débranché, lien coupé).
-    #[error("écran injoignable : {0}")]
+    #[error("display unreachable: {0}")]
     Disconnected(String),
     /// Droits insuffisants (udev, logind) : inutile de réessayer.
-    #[error("accès refusé : {0}")]
+    #[error("access denied: {0}")]
     PermissionDenied(String),
     /// Réponse ou configuration invalide (ex. maximum nul).
-    #[error("réponse invalide : {0}")]
+    #[error("invalid response: {0}")]
     Invalid(String),
 }
 

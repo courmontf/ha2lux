@@ -252,9 +252,7 @@ impl<L: Link> Runner<L> {
     }
 
     fn on_auth_failure(&mut self, now: Instant) {
-        tracing::warn!(
-            "jeton Home Assistant refusé : aucune nouvelle tentative avant plusieurs minutes"
-        );
+        tracing::warn!("Home Assistant token refused: no new attempt for several minutes");
         let until = now + self.cfg.auth_pause;
         if self.auth_until.replace(until).is_none() {
             self.emit(Output::AuthRejected(true));
@@ -284,7 +282,7 @@ impl<L: Link> Runner<L> {
     async fn try_connect(&mut self, now: Instant) {
         match self.link.connect().await {
             Ok(feed) => {
-                tracing::info!("WebSocket Home Assistant connecté");
+                tracing::info!("Home Assistant WebSocket connected");
                 self.feed = Some(feed);
                 self.backoff.reset();
                 self.next_connect = None;
@@ -312,7 +310,7 @@ impl<L: Link> Runner<L> {
                 return;
             }
             Err(error) => {
-                tracing::debug!(%error, "lecture Home Assistant en échec");
+                tracing::debug!(%error, "Home Assistant read failed");
                 let update = self.tracker.on_failure(self.ms(now));
                 self.apply(update);
             }
@@ -387,7 +385,7 @@ impl<L: Link> Runner<L> {
                 continue;
             }
             if self.pong_deadline.is_some_and(|t| now >= t) {
-                tracing::debug!("pas de réponse au battement de cœur : WebSocket abandonné");
+                tracing::debug!("no reply to heartbeat: WebSocket abandoned");
                 self.drop_feed(now, true);
                 continue;
             }
@@ -418,7 +416,7 @@ impl<L: Link> Runner<L> {
                 Woke::Feed(Ok(FeedEvent::Reading(reading))) => self.handle_reading(now, reading),
                 Woke::Feed(Ok(FeedEvent::Pong)) => self.pong_deadline = None,
                 Woke::Feed(Err(error)) => {
-                    tracing::debug!(%error, "WebSocket coupé : repli REST, reconnexion planifiée");
+                    tracing::debug!(%error, "WebSocket dropped: falling back to REST, reconnection scheduled");
                     self.drop_feed(now, true);
                 }
                 Woke::Timer => {}

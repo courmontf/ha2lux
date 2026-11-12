@@ -16,16 +16,16 @@ pub enum UrlError {
     #[error("l'adresse est vide")]
     Empty,
     /// Dépasse [`MAX_URL_LEN`].
-    #[error("l'adresse dépasse {MAX_URL_LEN} caractères")]
+    #[error("the address exceeds {MAX_URL_LEN} characters")]
     TooLong,
     /// Schéma autre que http/https.
-    #[error("seuls les schémas http et https sont acceptés")]
+    #[error("only the http and https schemes are accepted")]
     UnsupportedScheme,
     /// Identifiants (`utilisateur:mot-de-passe@`) interdits dans l'URL.
-    #[error("l'adresse ne doit pas contenir d'identifiants (le jeton se saisit séparément)")]
+    #[error("the address must not contain credentials (the token is entered separately)")]
     UserInfo,
     /// Hôte ambigu ou mal formé (zéros initiaux, entier nu, antislash, etc.).
-    #[error("hôte invalide ou ambigu")]
+    #[error("invalid or ambiguous host")]
     InvalidHost,
 }
 

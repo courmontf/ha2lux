@@ -36,9 +36,8 @@ impl RestClient {
 
     /// Lit l'état courant de l'entité.
     pub async fn read(&self) -> Result<Reading, HaError> {
-        let mut bearer =
-            HeaderValue::from_str(&format!("Bearer {}", self.config.token.expose()))
-                .map_err(|_| HaError::Protocol("jeton inutilisable dans un en-tête".to_owned()))?;
+        let mut bearer = HeaderValue::from_str(&format!("Bearer {}", self.config.token.expose()))
+            .map_err(|_| HaError::Protocol("token unusable in a header".to_owned()))?;
         bearer.set_sensitive(true); // jamais affiché, même par les journaux de la bibliothèque
         let mut response = self
             .client

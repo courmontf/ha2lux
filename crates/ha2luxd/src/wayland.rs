@@ -28,13 +28,13 @@ use crate::idle::{IdleEvent, IdleSource};
 #[derive(Debug, Error)]
 pub enum WaylandError {
     /// Pas de session Wayland ou connexion refusée.
-    #[error("connexion Wayland impossible : {0}")]
+    #[error("Wayland connection failed: {0}")]
     Connect(String),
     /// Le compositeur n'expose pas `ext_idle_notifier_v1` (ou pas de `wl_seat`).
-    #[error("le compositeur ne fournit pas {0}")]
+    #[error("the compositor does not provide {0}")]
     MissingGlobal(&'static str),
     /// Erreur de protocole.
-    #[error("erreur Wayland : {0}")]
+    #[error("Wayland error: {0}")]
     Protocol(String),
 }
 

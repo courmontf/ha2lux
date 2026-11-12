@@ -282,7 +282,7 @@ pub enum Command {
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ControlError {
     /// Valeur hors bornes.
-    #[error("valeur hors bornes ({what}) : {value}")]
+    #[error("value out of range ({what}): {value}")]
     OutOfRange {
         /// Grandeur concernée : `master-level`, `display-level`, `step` ou `preset-level`.
         what: &'static str,
@@ -290,13 +290,13 @@ pub enum ControlError {
         value: i64,
     },
     /// Écran inconnu.
-    #[error("écran inconnu : {0}")]
+    #[error("unknown display: {0}")]
     UnknownDisplay(DisplayId),
     /// Écran connu mais pas contrôlable pour le moment.
-    #[error("écran indisponible : {0}")]
+    #[error("display unavailable: {0}")]
     DisplayUnavailable(DisplayId),
     /// Aucun écran contrôlable.
-    #[error("aucun écran contrôlable")]
+    #[error("no controllable display")]
     NoControllableDisplay,
 }
 

@@ -101,7 +101,7 @@ async fn timed<T>(
     match tokio::time::timeout(CALL_TIMEOUT, future).await {
         Ok(result) => result.map_err(|e| unavailable(&e)),
         Err(_) => Err(SecretError::Unavailable(
-            "le trousseau ne répond pas".to_owned(),
+            "the keyring is not responding".to_owned(),
         )),
     }
 }
@@ -149,7 +149,7 @@ impl ServiceSecretStore {
             Ok(Self { connection })
         } else {
             Err(SecretError::Unavailable(
-                "aucun service org.freedesktop.secrets sur le bus de session".to_owned(),
+                "no org.freedesktop.secrets service on the session bus".to_owned(),
             ))
         }
     }
@@ -240,7 +240,7 @@ impl SecretStore for ServiceSecretStore {
         let collection_path = timed(service.read_alias("default")).await?;
         if is_none_path(&collection_path) {
             return Err(SecretError::Unavailable(
-                "aucune collection par défaut dans le trousseau".to_owned(),
+                "no default collection in the keyring".to_owned(),
             ));
         }
         let collection = SecretCollectionProxy::builder(&self.connection)

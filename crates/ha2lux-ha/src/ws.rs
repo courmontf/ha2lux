@@ -55,7 +55,7 @@ fn map_ws_error(error: WsError) -> HaError {
             }
         }
         WsError::ConnectionClosed | WsError::AlreadyClosed => {
-            HaError::Connection("connexion fermée".to_owned())
+            HaError::Connection("connection closed".to_owned())
         }
         other => HaError::Protocol(short(&other.to_string())),
     }
@@ -102,14 +102,14 @@ impl WsClient {
     async fn recv_json(&mut self) -> Result<Value, HaError> {
         loop {
             match self.socket.next().await {
-                None => return Err(HaError::Connection("connexion fermée".to_owned())),
+                None => return Err(HaError::Connection("connection closed".to_owned())),
                 Some(Err(error)) => return Err(map_ws_error(error)),
                 Some(Ok(Message::Text(text))) => {
                     return serde_json::from_str(text.as_str())
-                        .map_err(|_| HaError::Protocol("JSON invalide".to_owned()));
+                        .map_err(|_| HaError::Protocol("invalid JSON".to_owned()));
                 }
                 Some(Ok(Message::Close(_))) => {
-                    return Err(HaError::Connection("fermée par Home Assistant".to_owned()));
+                    return Err(HaError::Connection("closed by Home Assistant".to_owned()));
                 }
                 Some(Ok(_)) => {} // ping/pong de bas niveau, binaire : ignorés
             }
@@ -135,7 +135,7 @@ impl WsClient {
             Some("auth_ok") => Ok(()),
             Some("auth_invalid") => Err(HaError::Auth),
             _ => Err(HaError::Protocol(
-                "réponse d'authentification inattendue".to_owned(),
+                "unexpected authentication response".to_owned(),
             )),
         }
     }
@@ -160,7 +160,7 @@ impl WsClient {
                         Ok(())
                     } else {
                         Err(HaError::Protocol(format!(
-                            "souscription refusée ({})",
+                            "subscription refused ({})",
                             message["error"]["code"].as_str().unwrap_or("?")
                         )))
                     };
@@ -211,7 +211,7 @@ impl WsClient {
                 match message["type"].as_str() {
                     Some("result") if message["success"] != true => {
                         return Err(HaError::Protocol(format!(
-                            "gabarit refusé ({})",
+                            "template refused ({})",
                             message["error"]["code"].as_str().unwrap_or("?")
                         )));
                     }
@@ -221,7 +221,7 @@ impl WsClient {
                         }
                         if let Some(error) = message["event"]["error"].as_str() {
                             return Err(HaError::Protocol(format!(
-                                "gabarit en erreur : {}",
+                                "template error: {}",
                                 short(error)
                             )));
                         }

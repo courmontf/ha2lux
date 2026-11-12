@@ -74,11 +74,11 @@ async fn main() -> ExitCode {
             return ExitCode::from(3);
         }
     };
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), config = %paths.config_file.display(), "démarrage");
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), config = %paths.config_file.display(), "starting");
     let keyring = match ha2lux_secrets::ServiceSecretStore::connect_session().await {
         Ok(store) => Some(store),
         Err(error) => {
-            tracing::info!(%error, "pas de trousseau : repli sur le fichier de secrets");
+            tracing::info!(%error, "no keyring: falling back to the secrets file");
             None
         }
     };
@@ -99,7 +99,7 @@ async fn main() -> ExitCode {
     match run(options, shutdown_signal()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            tracing::error!(%error, "arrêt sur erreur");
+            tracing::error!(%error, "stopping on error");
             eprintln!("{}", t!("daemon-error", error = error.to_string()));
             ExitCode::from(3)
         }

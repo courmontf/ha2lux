@@ -22,13 +22,13 @@ pub use service::ServiceSecretStore;
 #[derive(Debug, Error)]
 pub enum SecretError {
     /// Pas de trousseau joignable (service absent, bus indisponible).
-    #[error("trousseau indisponible : {0}")]
+    #[error("keyring unavailable: {0}")]
     Unavailable(String),
     /// Le trousseau est verrouillé et l'utilisateur n'a pas accepté de le déverrouiller.
-    #[error("trousseau verrouillé : déverrouillage refusé ou expiré")]
+    #[error("keyring locked: unlock refused or timed out")]
     Locked,
     /// Fichier de secrets lisible par d'autres utilisateurs.
-    #[error("{0} : permissions trop larges (attendu 0600), fichier ignoré")]
+    #[error("{0}: permissions too open (0600 expected), file ignored")]
     TooOpen(String),
     /// Autre erreur d'entrée/sortie ou de format.
     #[error("{0}")]
@@ -94,7 +94,9 @@ impl SecretStore for ChainStore {
             match keyring.get(host_key).await {
                 Ok(Some(token)) => return Ok(Some(token)),
                 Ok(None) => {}
-                Err(error) => tracing::debug!(%error, "trousseau illisible : repli sur le fichier"),
+                Err(error) => {
+                    tracing::debug!(%error, "keyring unreadable: falling back to the file")
+                }
             }
         }
         self.file.get(host_key).await
@@ -106,12 +108,12 @@ impl SecretStore for ChainStore {
                 Ok(stored) => {
                     // Un ancien exemplaire dans le fichier n'a plus lieu d'être.
                     if let Err(error) = self.file.delete(host_key).await {
-                        tracing::debug!(%error, "ancien jeton du fichier non supprimé");
+                        tracing::debug!(%error, "old token in the file not removed");
                     }
                     return Ok(stored);
                 }
                 Err(error) => {
-                    tracing::warn!(%error, "trousseau indisponible : jeton rangé dans le fichier 0600")
+                    tracing::warn!(%error, "keyring unavailable: token stored in the 0600 file")
                 }
             }
         }

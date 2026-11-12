@@ -51,7 +51,7 @@ use unic_langid::LanguageIdentifier;
 
 /// Langue utilisée quand l'environnement n'en désigne aucune de disponible, et
 /// pour les clés qu'une traduction n'a pas encore.
-pub const FALLBACK_LANG: &str = "fr";
+pub const FALLBACK_LANG: &str = "en";
 
 /// Variable d'environnement qui impose la langue (prioritaire sur `LANG`).
 pub const LANG_ENV: &str = "HA2LUX_LANG";
@@ -64,16 +64,28 @@ struct Catalog {
 
 /// Catalogues embarqués. Toute nouvelle langue ou tout nouveau fichier s'ajoute
 /// ici ; le test `catalogs_cover_locales_dir` détecte un oubli.
-const CATALOGS: &[Catalog] = &[Catalog {
-    lang: "fr",
-    files: &[
-        ("common.ftl", include_str!("../locales/fr/common.ftl")),
-        ("cli.ftl", include_str!("../locales/fr/cli.ftl")),
-        ("tray.ftl", include_str!("../locales/fr/tray.ftl")),
-        ("daemon.ftl", include_str!("../locales/fr/daemon.ftl")),
-        ("doctor.ftl", include_str!("../locales/fr/doctor.ftl")),
-    ],
-}];
+const CATALOGS: &[Catalog] = &[
+    Catalog {
+        lang: "en",
+        files: &[
+            ("common.ftl", include_str!("../locales/en/common.ftl")),
+            ("cli.ftl", include_str!("../locales/en/cli.ftl")),
+            ("tray.ftl", include_str!("../locales/en/tray.ftl")),
+            ("daemon.ftl", include_str!("../locales/en/daemon.ftl")),
+            ("doctor.ftl", include_str!("../locales/en/doctor.ftl")),
+        ],
+    },
+    Catalog {
+        lang: "fr",
+        files: &[
+            ("common.ftl", include_str!("../locales/fr/common.ftl")),
+            ("cli.ftl", include_str!("../locales/fr/cli.ftl")),
+            ("tray.ftl", include_str!("../locales/fr/tray.ftl")),
+            ("daemon.ftl", include_str!("../locales/fr/daemon.ftl")),
+            ("doctor.ftl", include_str!("../locales/fr/doctor.ftl")),
+        ],
+    },
+];
 
 /// Langues disponibles, dans l'ordre de déclaration.
 pub fn available() -> Vec<&'static str> {
@@ -329,40 +341,38 @@ mod tests {
         );
     }
 
-    /// Une langue partielle : ses clés l'emportent, les autres retombent sur `fr`,
-    /// et les pluriels suivent les règles de la langue.
+    /// Une langue partielle : ses clés l'emportent, les autres retombent sur la
+    /// langue de repli, et les pluriels suivent les règles de la langue.
     #[test]
     fn a_partial_language_falls_back_key_by_key_and_handles_plurals() {
         const CATALOGS_TEST: &[Catalog] = &[
             Catalog {
+                lang: "en",
+                files: &[("t.ftl", "only-en = english only\nboth = english\n")],
+            },
+            Catalog {
                 lang: "fr",
                 files: &[(
                     "t.ftl",
-                    "only-fr = seulement en français\nboth = français\n",
-                )],
-            },
-            Catalog {
-                lang: "en",
-                files: &[(
-                    "t.ftl",
-                    "both = english\ndisplays = { $n ->\n    [one] { $n } display\n   *[other] { $n } displays\n }\n",
+                    "both = français\ndisplays = { $n ->\n    [one] { $n } écran\n   *[other] { $n } écrans\n }\n",
                 )],
             },
         ];
-        let en = Localizer::with_catalogs(CATALOGS_TEST, "en").expect("catalogue en");
-        assert_eq!(en.lang(), "en");
-        assert_eq!(en.translate("both", None), "english");
-        assert_eq!(en.translate("only-fr", None), "seulement en français");
-        assert_eq!(en.translate("absent", None), "absent");
-        for (n, expected) in [(1, "1 display"), (3, "3 displays")] {
+        let fr = Localizer::with_catalogs(CATALOGS_TEST, "fr").expect("catalogue fr");
+        assert_eq!(fr.lang(), "fr");
+        assert_eq!(fr.translate("both", None), "français");
+        assert_eq!(fr.translate("only-en", None), "english only");
+        assert_eq!(fr.translate("absent", None), "absent");
+        // En français, 0 et 1 sont au singulier.
+        for (n, expected) in [(0, "0 écran"), (1, "1 écran"), (3, "3 écrans")] {
             let mut args = FluentArgs::new();
             args.set("n", arg(n));
-            assert_eq!(en.translate("displays", Some(&args)), expected);
+            assert_eq!(fr.translate("displays", Some(&args)), expected);
         }
-        // Langue inconnue : retombe sur le français.
+        // Langue inconnue : retombe sur la langue de repli.
         let unknown = Localizer::with_catalogs(CATALOGS_TEST, "de").expect("repli");
-        assert_eq!(unknown.lang(), "fr");
-        assert_eq!(unknown.translate("both", None), "français");
+        assert_eq!(unknown.lang(), FALLBACK_LANG);
+        assert_eq!(unknown.translate("both", None), "english");
     }
 
     /// Chaque clé citée dans le code (`t!("…")`, `encode("…")`) existe dans le

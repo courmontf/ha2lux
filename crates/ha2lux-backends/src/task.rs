@@ -212,7 +212,7 @@ impl DisplayHandle {
 }
 
 fn gone() -> BackendError {
-    BackendError::Disconnected("tâche d'écran arrêtée".to_owned())
+    BackendError::Disconnected("display task stopped".to_owned())
 }
 
 /// Lance la tâche d'un écran. Doit être appelée dans un runtime tokio.
@@ -391,7 +391,7 @@ impl<B: DisplayBackend> Runner<B> {
                     self.last_write_at = Some(Instant::now());
                     let last = attempt + 1 == attempts;
                     let fatal = !error.is_transient() || self.timeouts >= self.config.max_abandoned;
-                    tracing::debug!(display = %self.id, %error, attempt, "écriture en échec");
+                    tracing::debug!(display = %self.id, %error, attempt, "write failed");
                     if fatal || last {
                         return self.on_final_failure(error, fatal);
                     }
@@ -444,7 +444,7 @@ impl<B: DisplayBackend> Runner<B> {
         if self.failures >= self.config.cooldown_after {
             if self.frozen_until.is_none_or(|t| t <= Instant::now()) {
                 // Un seul avertissement par entrée en cooldown ; la suite reste en debug.
-                tracing::warn!(display = %self.id, "écritures gelées après des échecs répétés");
+                tracing::warn!(display = %self.id, "writes frozen after repeated failures");
             }
             self.frozen_until = Some(Instant::now() + self.config.cooldown);
             self.emit(DisplayEvent::CoolingDown {

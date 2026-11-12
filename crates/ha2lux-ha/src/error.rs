@@ -10,28 +10,28 @@ pub const MAX_BODY: usize = 256 * 1024;
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum HaError {
     /// Jeton refusé (401/403, `auth_invalid`). Inutile de réessayer en boucle.
-    #[error("authentification refusée : jeton invalide ou révoqué")]
+    #[error("authentication refused: token invalid or revoked")]
     Auth,
     /// L'entité n'existe pas (404).
-    #[error("entité introuvable")]
+    #[error("entity not found")]
     NotFound,
     /// Redirection : jamais suivie, pour que le jeton ne parte pas ailleurs.
-    #[error("redirection refusée : le jeton n'est jamais renvoyé vers une autre adresse")]
+    #[error("redirect refused: the token is never sent to another address")]
     Redirect,
     /// Réponse de plus de 256 Kio.
-    #[error("réponse trop volumineuse (plus de 256 Kio)")]
+    #[error("response too large (over 256 KiB)")]
     TooLarge,
     /// Certificat invalide ou erreur TLS : aucun contournement n'existe.
-    #[error("erreur TLS : {0}")]
+    #[error("TLS error: {0}")]
     Tls(String),
     /// Délai dépassé (8 s).
-    #[error("délai dépassé")]
+    #[error("timed out")]
     Timeout,
     /// Connexion impossible (résolution, refus, coupure).
-    #[error("connexion impossible : {0}")]
+    #[error("connection failed: {0}")]
     Connection(String),
     /// Réponse que le protocole ne permet pas d'interpréter.
-    #[error("réponse inattendue : {0}")]
+    #[error("unexpected response: {0}")]
     Protocol(String),
 }
 

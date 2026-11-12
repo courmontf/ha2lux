@@ -60,7 +60,7 @@ impl ha2lux_cli::client::Daemon for NoDaemon {
         _call: ha2lux_cli::client::Call,
     ) -> Result<ha2lux_cli::client::Answer, CallError> {
         Err(CallError::Other(
-            "aucun démon nécessaire pour cette commande".to_owned(),
+            "no daemon needed for this command".to_owned(),
         ))
     }
 }

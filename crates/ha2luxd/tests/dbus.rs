@@ -519,7 +519,7 @@ async fn a_new_instance_refuses_to_start_if_the_old_one_does_not_release_the_nam
     );
     let error = second.task.await.unwrap().unwrap_err();
     assert!(matches!(error, ServiceError::Takeover(_)), "{error}");
-    assert!(error.to_string().contains("jamais deux démons"), "{error}");
+    assert!(error.to_string().contains("never two daemons"), "{error}");
     assert_eq!(
         second.hardware.discoveries(),
         0,
