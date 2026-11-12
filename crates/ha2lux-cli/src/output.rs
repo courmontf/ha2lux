@@ -1,54 +1,60 @@
 //! Rendu des réponses du démon, en texte lisible ou en JSON (fonctions pures).
 
+use ha2lux_i18n::t;
 use ha2lux_ipc::DisplayDto;
 use serde::Serialize;
 
 use crate::client::StatusInfo;
 
-fn kind_label(kind: &str) -> &str {
+fn kind_label(kind: &str) -> String {
     match kind {
-        "internal" => "interne",
-        "external" => "externe",
-        other => other,
+        "internal" => t!("cli-kind-internal"),
+        "external" => t!("cli-kind-external"),
+        other => other.to_owned(),
     }
 }
 
-fn state_label(state: &str) -> &str {
+fn state_label(state: &str) -> String {
     match state {
-        "controllable" => "contrôlable",
-        "unavailable" => "indisponible",
-        "not-controllable" => "non contrôlable",
-        "absent" => "absent",
-        other => other,
+        "controllable" => t!("cli-state-controllable"),
+        "unavailable" => t!("cli-state-unavailable"),
+        "not-controllable" => t!("cli-state-not-controllable"),
+        "absent" => t!("cli-state-absent"),
+        other => other.to_owned(),
     }
+}
+
+fn percent(value: impl std::fmt::Display) -> String {
+    t!("cli-percent", value = value.to_string())
 }
 
 fn level_label(level: i32) -> String {
     if level < 0 {
         "?".to_owned()
     } else {
-        format!("{level} %")
+        percent(level)
     }
 }
 
 /// Une ligne d'écran, numérotée à partir de 1.
 pub fn display_line(number: usize, d: &DisplayDto) -> String {
-    format!(
-        "{number:>2}  {}  [{}]  {}  {}  niveau {}  plage {}-{}",
-        d.name,
-        d.id,
-        kind_label(&d.kind),
-        state_label(&d.state),
-        level_label(d.level),
-        d.low,
-        d.high
+    t!(
+        "cli-display-line",
+        number = format!("{number:>2}"),
+        name = d.name.as_str(),
+        id = d.id.as_str(),
+        kind = kind_label(&d.kind),
+        state = state_label(&d.state),
+        level = level_label(d.level),
+        low = d.low.to_string(),
+        high = d.high.to_string()
     )
 }
 
 /// `ha2lux list`.
 pub fn render_list(list: &[DisplayDto]) -> String {
     if list.is_empty() {
-        return "aucun écran détecté\n".to_owned();
+        return t!("cli-list-empty") + "\n";
     }
     list.iter()
         .enumerate()
@@ -58,15 +64,19 @@ pub fn render_list(list: &[DisplayDto]) -> String {
 
 /// `ha2lux get` (sans `--display`).
 pub fn render_get(status: &StatusInfo, list: &[DisplayDto]) -> String {
-    let master = status
-        .master
-        .map_or("inconnu".to_owned(), |m| format!("{m} %"));
-    let mut out = format!("maître : {master}  (source : {})\n", status.mode);
+    let master = status.master.map_or_else(|| t!("cli-unknown"), percent);
+    let mut out = t!(
+        "cli-get-master",
+        level = master,
+        mode = status.mode.as_str()
+    ) + "\n";
     if let Some(resume) = &status.schedule_resume {
-        out.push_str(&format!("planning suspendu jusqu'à {resume}\n"));
+        out.push_str(&t!("cli-get-schedule-resume", resume = resume.as_str()));
+        out.push('\n');
     }
     if status.dimmed {
-        out.push_str("atténuation d'inactivité en cours\n");
+        out.push_str(&t!("cli-get-dimmed"));
+        out.push('\n');
     }
     out.push_str(&render_list(list));
     out
@@ -74,90 +84,114 @@ pub fn render_get(status: &StatusInfo, list: &[DisplayDto]) -> String {
 
 /// `ha2lux get --display …`.
 pub fn render_display_level(number: usize, d: &DisplayDto) -> String {
-    format!("{} (n°{number}) : {}\n", d.name, level_label(d.level))
+    t!(
+        "cli-display-level",
+        name = d.name.as_str(),
+        number = number.to_string(),
+        level = level_label(d.level)
+    ) + "\n"
 }
 
 /// `ha2lux auto status`.
 pub fn render_auto(status: &StatusInfo) -> String {
     let mut text = String::new();
     let enabled = if status.auto_enabled {
-        "activée"
+        t!("cli-auto-enabled")
     } else {
-        "désactivée"
+        t!("cli-auto-disabled")
     };
     let configured = if status.auto_configured {
-        "configurée"
+        t!("cli-auto-configured")
     } else if status.ha_token_present {
-        "non configurée (URL et entité requises)"
+        t!("cli-auto-needs-url-entity")
     } else {
-        "non configurée (URL, entité et jeton requis : ha2lux auto token)"
+        t!("cli-auto-needs-url-entity-token")
     };
-    text.push_str(&format!("auto-luminosité : {enabled}, {configured}\n"));
-    text.push_str(&format!("état : {}\n", auto_state(status)));
+    text.push_str(&t!(
+        "cli-auto-summary",
+        enabled = enabled,
+        configured = configured
+    ));
+    text.push('\n');
+    text.push_str(&t!("cli-auto-state-line", state = auto_state(status)));
+    text.push('\n');
     if status.ha_auth_rejected {
-        text.push_str(
-            "jeton refusé par Home Assistant : enregistrez-en un nouveau (ha2lux auto token)\n",
-        );
+        text.push_str(&t!("cli-auto-token-rejected"));
+        text.push('\n');
     }
     if let Some(raw) = &status.ha_raw {
-        text.push_str(&format!("valeur brute du capteur : {raw}\n"));
+        text.push_str(&t!("cli-auto-raw", raw = raw.as_str()));
+        text.push('\n');
     }
     if let Some(lux) = status.lux_smoothed {
-        text.push_str(&format!("éclairement lissé : {lux:.0} lx"));
-        if let Some(latest) = status.lux_latest {
-            text.push_str(&format!(" (dernière mesure : {latest:.0} lx)"));
+        let lux = format!("{lux:.0}");
+        match status.lux_latest {
+            Some(latest) => text.push_str(&t!(
+                "cli-auto-lux-with-latest",
+                lux = lux,
+                latest = format!("{latest:.0}")
+            )),
+            None => text.push_str(&t!("cli-auto-lux", lux = lux)),
         }
         text.push('\n');
     }
     if let Some(target) = status.auto_target {
-        text.push_str(&format!("niveau visé par la courbe : {target} %\n"));
+        text.push_str(&t!("cli-auto-target", level = percent(target)));
+        text.push('\n');
     }
     if let Some(level) = status.master {
-        text.push_str(&format!("niveau appliqué : {level} %\n"));
+        text.push_str(&t!("cli-auto-applied", level = percent(level)));
+        text.push('\n');
     }
-    text.push_str(&format!(
-        "courbe ({}) : {}\n",
-        if status.curve_default {
-            "par défaut"
-        } else {
-            "apprise"
-        },
-        status
-            .curve
-            .iter()
-            .map(|(lux, level)| format!("{lux:.0} lx → {level} %"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    ));
-    text.push_str(&format!("source de pilotage : {}\n", status.mode));
+    let kind = if status.curve_default {
+        t!("cli-auto-curve-default")
+    } else {
+        t!("cli-auto-curve-learned")
+    };
+    let points = status
+        .curve
+        .iter()
+        .map(|(lux, level)| {
+            t!(
+                "cli-auto-curve-point",
+                lux = format!("{lux:.0}"),
+                level = percent(level)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    text.push_str(&t!("cli-auto-curve", kind = kind, points = points));
+    text.push('\n');
+    text.push_str(&t!("cli-auto-source", mode = status.mode.as_str()));
+    text.push('\n');
     text
 }
 
 /// Résumé de l'état du lien en une expression : inactif, connexion, actif, etc.
-fn auto_state(status: &StatusInfo) -> &'static str {
+fn auto_state(status: &StatusInfo) -> String {
     if !status.auto_enabled {
-        return "inactif";
+        return t!("cli-auto-state-inactive");
     }
     if !status.auto_configured {
-        return "non configuré";
+        return t!("cli-auto-state-not-configured");
     }
     if status.ha_auth_rejected {
-        return "jeton refusé";
+        return t!("cli-auto-state-token-rejected");
     }
     match status.ha_health.as_str() {
-        "offline" => "hors ligne",
-        "degraded" => "dégradé",
-        _ if status.lux_smoothed.is_none() => "en attente d'une mesure",
-        _ if status.auto_adjusting => "en ajustement",
-        "stale" => "pas de mesure récente",
-        _ => "actif",
+        "offline" => t!("cli-auto-state-offline"),
+        "degraded" => t!("cli-auto-state-degraded"),
+        _ if status.lux_smoothed.is_none() => t!("cli-auto-state-waiting"),
+        _ if status.auto_adjusting => t!("cli-auto-state-adjusting"),
+        "stale" => t!("cli-auto-state-stale"),
+        _ => t!("cli-auto-state-active"),
     }
 }
 
 /// Liste des capteurs d'éclairement.
 pub fn render_sensors(list: &[(String, String, String)]) -> String {
     if list.is_empty() {
-        return "aucun capteur d'éclairement (device_class illuminance) trouvé\n".to_owned();
+        return t!("cli-sensors-none") + "\n";
     }
     let mut text = String::new();
     for (entity, name, area) in list {
@@ -172,18 +206,19 @@ pub fn render_sensors(list: &[(String, String, String)]) -> String {
 
 /// Phrase de confirmation d'un interrupteur.
 pub fn toggle_message(feature: &str, on: bool, status: &StatusInfo) -> String {
-    match feature {
-        "schedule" => format!("planning {}\n", if on { "activé" } else { "désactivé" }),
-        "idle-dim" if on => format!(
-            "atténuation d'inactivité activée : niveau {} %, après {} min d'inactivité\n",
-            status.idle_level, status.idle_minutes
+    let text = match feature {
+        "schedule" if on => t!("cli-toggle-schedule-on"),
+        "schedule" => t!("cli-toggle-schedule-off"),
+        "idle-dim" if on => t!(
+            "cli-toggle-idle-on",
+            level = status.idle_level.to_string(),
+            minutes = status.idle_minutes.to_string()
         ),
-        "idle-dim" => "atténuation d'inactivité désactivée\n".to_owned(),
-        _ => format!(
-            "auto-luminosité {}\n",
-            if on { "activée" } else { "désactivée" }
-        ),
-    }
+        "idle-dim" => t!("cli-toggle-idle-off"),
+        _ if on => t!("cli-toggle-auto-on"),
+        _ => t!("cli-toggle-auto-off"),
+    };
+    text + "\n"
 }
 
 /// Sortie JSON de `get`.

@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use ha2lux_i18n::t;
 use ha2lux_ipc::{DisplayDto, FEATURE_AUTO, FEATURE_IDLE_DIM, FEATURE_SCHEDULE};
 use serde::Serialize;
 
@@ -22,6 +23,11 @@ pub struct Outcome {
     pub stderr: String,
     /// Code de sortie : 0 succès, 1 usage, 2 démon absent, 3 échec, 4 démon sans réponse.
     pub code: u8,
+}
+
+/// Ligne d'erreur pour stderr.
+fn error_line(message: &str) -> String {
+    t!("cli-error", message = message) + "\n"
 }
 
 impl Outcome {
@@ -44,7 +50,7 @@ impl Outcome {
         match serde_json::to_string_pretty(value) {
             Ok(text) => Self::out(text + "\n"),
             Err(error) => Self {
-                stderr: format!("erreur : sérialisation JSON impossible : {error}\n"),
+                stderr: error_line(&t!("cli-err-json", error = error.to_string())),
                 code: 3,
                 ..Self::default()
             },
@@ -62,7 +68,7 @@ impl Outcome {
             }
         } else {
             Self {
-                stderr: format!("erreur : {message}\n"),
+                stderr: error_line(message),
                 code,
                 ..Self::default()
             }
@@ -77,9 +83,9 @@ impl Outcome {
 async fn call<D: Daemon>(daemon: &D, timeout: Duration, call: Call) -> Result<Answer, CallError> {
     match tokio::time::timeout(timeout, daemon.call(call)).await {
         Ok(result) => result,
-        Err(_) => Err(CallError::NoReply(format!(
-            "aucune réponse en {} s",
-            timeout.as_secs_f32()
+        Err(_) => Err(CallError::NoReply(t!(
+            "cli-err-no-reply",
+            seconds = timeout.as_secs_f32().to_string()
         ))),
     }
 }
@@ -87,14 +93,14 @@ async fn call<D: Daemon>(daemon: &D, timeout: Duration, call: Call) -> Result<An
 async fn list<D: Daemon>(daemon: &D, timeout: Duration) -> Result<Vec<DisplayDto>, CallError> {
     match call(daemon, timeout, Call::List).await? {
         Answer::List(list) => Ok(list),
-        _ => Err(CallError::Other("réponse inattendue du démon".to_owned())),
+        _ => Err(CallError::Other(t!("cli-err-unexpected-reply"))),
     }
 }
 
 async fn status<D: Daemon>(daemon: &D, timeout: Duration) -> Result<StatusInfo, CallError> {
     match call(daemon, timeout, Call::Status).await? {
         Answer::Status(status) => Ok(*status),
-        _ => Err(CallError::Other("réponse inattendue du démon".to_owned())),
+        _ => Err(CallError::Other(t!("cli-err-unexpected-reply"))),
     }
 }
 
@@ -102,9 +108,11 @@ async fn status<D: Daemon>(daemon: &D, timeout: Duration) -> Result<StatusInfo, 
 fn selection_failure(json: bool, message: &str, list: &[DisplayDto]) -> Outcome {
     let mut outcome = Outcome::fail(json, 3, message);
     if !json {
-        outcome.stderr.push_str("écrans disponibles :\n");
+        outcome.stderr.push_str(&t!("cli-displays-available"));
+        outcome.stderr.push('\n');
         outcome.stderr.push_str(&output::render_list(list));
-        outcome.stderr.push_str("(voir `ha2lux list`)\n");
+        outcome.stderr.push_str(&t!("cli-see-list"));
+        outcome.stderr.push('\n');
     }
     outcome
 }
@@ -141,7 +149,7 @@ fn require_controllable(
     } else {
         Err(selection_failure(
             json,
-            &format!("écran indisponible : {}", display.name),
+            &t!("cli-err-display-unavailable", name = display.name.as_str()),
             all,
         ))
     }
@@ -182,7 +190,7 @@ async fn step<D: Daemon>(
                 return Outcome::fail(
                     json,
                     3,
-                    &format!("niveau actuel de {} inconnu", display.name),
+                    &t!("cli-err-level-unknown", name = display.name.as_str()),
                 );
             }
             let level = (i64::from(display.level) + signed).clamp(0, 100);
@@ -222,7 +230,7 @@ async fn toggle<D: Daemon>(
     }
     let mut outcome = Outcome::out(output::toggle_message(feature, on, &status));
     if feature == FEATURE_SCHEDULE && on && status.schedule_points == 0 {
-        outcome.stderr = "avertissement : le planning est activé mais ne contient aucun point (rien ne sera appliqué)\n".to_owned();
+        outcome.stderr = t!("cli-warn-schedule-empty") + "\n";
     }
     outcome
 }
@@ -346,7 +354,7 @@ pub async fn execute_with_input<D: Daemon>(
         Command::Auto(AutoCommand::Token { clear: true }) => {
             match call(daemon, timeout, Call::ClearToken).await {
                 Ok(_) if json => Outcome::ok(true),
-                Ok(_) => Outcome::out("jeton Home Assistant supprimé\n"),
+                Ok(_) => Outcome::out(t!("cli-token-cleared") + "\n"),
                 Err(error) => Outcome::from_call(json, &error),
             }
         }
@@ -354,19 +362,23 @@ pub async fn execute_with_input<D: Daemon>(
             let token = match input() {
                 Ok(text) => text.trim().to_owned(),
                 Err(error) => {
-                    return Outcome::fail(json, 1, &format!("lecture du jeton impossible : {error}"));
+                    return Outcome::fail(
+                        json,
+                        1,
+                        &t!("cli-err-token-read", error = error.to_string()),
+                    );
                 }
             };
             if token.is_empty() {
                 return Outcome::fail(
                     json,
                     1,
-                    "aucun jeton reçu : envoyez-le sur l'entrée standard (ex. : ha2lux auto token < fichier)",
+                    &t!("cli-err-token-empty"),
                 );
             }
             match call(daemon, timeout, Call::SetToken(Secret(token))).await {
                 Ok(_) if json => Outcome::ok(true),
-                Ok(_) => Outcome::out("jeton Home Assistant enregistré\n"),
+                Ok(_) => Outcome::out(t!("cli-token-saved") + "\n"),
                 Err(error) => Outcome::from_call(json, &error),
             }
         }
@@ -380,13 +392,16 @@ pub async fn execute_with_input<D: Daemon>(
                     .collect::<Vec<_>>(),
             ),
             Ok(Answer::Sensors(list)) => Outcome::out(output::render_sensors(&list)),
-            Ok(_) => Outcome::from_call(json, &CallError::Other("réponse inattendue".to_owned())),
+            Ok(_) => Outcome::from_call(
+                json,
+                &CallError::Other(t!("cli-err-unexpected-reply-short")),
+            ),
             Err(error) => Outcome::from_call(json, &error),
         },
         Command::Auto(AutoCommand::ResetCurve) => {
             match call(daemon, timeout, Call::ResetCurve).await {
                 Ok(_) if json => Outcome::ok(true),
-                Ok(_) => Outcome::out("courbe apprise oubliée\n"),
+                Ok(_) => Outcome::out(t!("cli-curve-reset") + "\n"),
                 Err(error) => Outcome::from_call(json, &error),
             }
         }
@@ -414,9 +429,7 @@ async fn doctor(json: bool, probe: bool) -> Outcome {
                 code,
                 ..Outcome::default()
             },
-            Err(error) => {
-                Outcome::fail(true, 3, &format!("sérialisation JSON impossible : {error}"))
-            }
+            Err(error) => Outcome::fail(true, 3, &t!("cli-err-json", error = error.to_string())),
         };
     }
     Outcome {

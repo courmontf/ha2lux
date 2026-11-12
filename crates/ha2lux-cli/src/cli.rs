@@ -2,12 +2,16 @@
 //! validations que le démon (qui reste l'autorité).
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use ha2lux_i18n::t;
 
 fn bounded(text: &str, low: u32, high: u32) -> Result<u32, String> {
     match text.trim().parse::<u32>() {
         Ok(value) if (low..=high).contains(&value) => Ok(value),
-        _ => Err(format!(
-            "« {text} » n'est pas un entier entre {low} et {high}"
+        _ => Err(t!(
+            "cli-err-not-integer-between",
+            text = text,
+            low = low.to_string(),
+            high = high.to_string()
         )),
     }
 }
@@ -33,7 +37,7 @@ fn step(text: &str) -> Result<u32, String> {
 )]
 pub struct Cli {
     /// Affiche l'aide.
-    #[arg(short = 'h', long = "help", global = true, action = clap::ArgAction::Help, help_heading = "Options globales")]
+    #[arg(short = 'h', long = "help", global = true, action = clap::ArgAction::Help, help_heading = "global")]
     #[allow(dead_code)]
     help: Option<bool>,
     /// Affiche la version.
@@ -41,7 +45,7 @@ pub struct Cli {
     #[allow(dead_code)]
     version: Option<bool>,
     /// Sortie JSON (pour les scripts) ; les erreurs sont aussi renvoyées en JSON.
-    #[arg(long, global = true, help_heading = "Options globales")]
+    #[arg(long, global = true, help_heading = "global")]
     pub json: bool,
     /// Commande à exécuter (une seule par appel).
     #[command(subcommand)]
@@ -59,7 +63,7 @@ pub struct DisplayOpt {
 
 fn non_empty(value: &str) -> Result<String, String> {
     if value.trim().is_empty() {
-        Err("la valeur ne peut pas être vide".to_owned())
+        Err(t!("cli-err-empty-value"))
     } else {
         Ok(value.to_owned())
     }
@@ -223,67 +227,122 @@ fn normalize(args: Vec<String>) -> Vec<String> {
     out
 }
 
-const TEMPLATE: &str = "{about}\n\nUtilisation : {usage}\n\n{all-args}\n";
-
-/// Applique à une commande, et récursivement à ses sous-commandes, les intitulés français.
-fn localize(command: clap::Command) -> clap::Command {
-    command
-        .help_template(TEMPLATE)
-        .subcommand_help_heading("Commandes")
-        .subcommand_value_name("COMMANDE")
-        .mut_subcommands(localize)
+/// Modèle d'aide : description, usage, puis arguments.
+fn usage_template() -> String {
+    format!(
+        "{{about}}\n\n{} {{usage}}\n\n{{all-args}}\n",
+        t!("cli-usage")
+    )
 }
 
-/// La commande clap complète, en français.
+/// Texte du catalogue pour `key`, s'il existe.
+fn catalog(key: &str) -> Option<String> {
+    let text = t!(key);
+    (text != key).then_some(text)
+}
+
+/// Applique à une commande, et récursivement à ses sous-commandes, les textes du
+/// catalogue : `cli-cmd-<chemin>` (description), `cli-arg-<chemin>-<id>` (aide
+/// d'un argument) et `cli-val-<chemin>-<id>` (nom de sa valeur). Le chemin de la
+/// racine est `root`, celui d'une sous-commande `auto token` est `auto-token`.
+fn localize(command: clap::Command) -> clap::Command {
+    localize_node(command, "root")
+}
+
+fn localize_node(mut command: clap::Command, path: &str) -> clap::Command {
+    command = command
+        .help_template(usage_template())
+        .subcommand_help_heading(t!("cli-heading-commands"))
+        .subcommand_value_name(t!("cli-value-command"));
+    if let Some(about) = catalog(&format!("cli-cmd-{path}")) {
+        command = command.about(about);
+    }
+    let ids: Vec<String> = command
+        .get_arguments()
+        .map(|arg| arg.get_id().to_string())
+        .collect();
+    for id in ids {
+        let help = catalog(&format!("cli-arg-{path}-{id}"));
+        let value_name = catalog(&format!("cli-val-{path}-{id}"));
+        command = command.mut_arg(id.as_str(), |mut arg| {
+            if let Some(help) = help {
+                arg = arg.help(help);
+            }
+            if let Some(value_name) = value_name {
+                arg = arg.value_name(value_name);
+            }
+            if arg.get_help_heading().is_some() {
+                arg = arg.help_heading(t!("cli-heading-global"));
+            }
+            arg
+        });
+    }
+    let names: Vec<String> = command
+        .get_subcommands()
+        .map(|sub| sub.get_name().to_owned())
+        .collect();
+    for name in names {
+        let child = if path == "root" {
+            name.clone()
+        } else {
+            format!("{path}-{name}")
+        };
+        command = command.mut_subcommand(name.as_str(), |sub| localize_node(sub, &child));
+    }
+    command
+}
+
+/// La commande clap complète, dans la langue de l'utilisateur.
 pub fn command() -> clap::Command {
     localize(Cli::command())
 }
 
-/// Message d'usage en français à partir d'une erreur de clap.
+/// Message d'usage traduit à partir d'une erreur de clap.
 fn friendly(error: &clap::Error) -> String {
     use clap::error::{ContextKind, ErrorKind};
     use std::error::Error;
     let get = |kind| error.get(kind).map(ToString::to_string).unwrap_or_default();
     let body = match error.kind() {
-        ErrorKind::InvalidSubcommand => format!(
-            "commande inconnue : {}",
-            get(ContextKind::InvalidSubcommand)
+        ErrorKind::InvalidSubcommand => t!(
+            "cli-usage-unknown-command",
+            value = get(ContextKind::InvalidSubcommand)
         ),
-        ErrorKind::UnknownArgument => format!(
-            "option ou argument inattendu : {}",
-            get(ContextKind::InvalidArg)
+        ErrorKind::UnknownArgument => t!(
+            "cli-usage-unknown-argument",
+            arg = get(ContextKind::InvalidArg)
         ),
-        ErrorKind::MissingRequiredArgument => format!(
-            "argument requis manquant : {}",
-            get(ContextKind::InvalidArg)
+        ErrorKind::MissingRequiredArgument => t!(
+            "cli-usage-missing-argument",
+            arg = get(ContextKind::InvalidArg)
         ),
-        ErrorKind::MissingSubcommand => "commande manquante".to_owned(),
+        ErrorKind::MissingSubcommand => t!("cli-usage-missing-command"),
         ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
             let mut reason = error
                 .source()
-                .map(|s| format!(" : {s}"))
+                .map(|s| t!("cli-usage-reason", reason = s.to_string()))
                 .unwrap_or_default();
             let valid = get(ContextKind::ValidValue);
             if !valid.is_empty() {
-                reason.push_str(&format!(" (valeurs possibles : {valid})"));
+                reason.push_str(&t!("cli-usage-possible-values", values = valid));
             }
-            format!(
-                "valeur invalide « {} » pour {}{reason}",
-                get(ContextKind::InvalidValue),
-                get(ContextKind::InvalidArg)
+            t!(
+                "cli-usage-invalid-value",
+                value = get(ContextKind::InvalidValue),
+                arg = get(ContextKind::InvalidArg),
+                reason = reason
             )
         }
         ErrorKind::ArgumentConflict => {
-            format!("arguments incompatibles : {}", get(ContextKind::InvalidArg))
+            t!("cli-usage-conflict", arg = get(ContextKind::InvalidArg))
         }
         ErrorKind::TooManyValues | ErrorKind::WrongNumberOfValues => {
-            format!(
-                "trop de valeurs pour {} (une seule attendue)",
-                get(ContextKind::InvalidArg)
-            )
+            t!("cli-usage-too-many", arg = get(ContextKind::InvalidArg))
         }
         ErrorKind::NoEquals | ErrorKind::TooFewValues => {
-            format!("valeur manquante pour {}", get(ContextKind::InvalidArg))
+            t!(
+                "cli-usage-missing-value",
+                arg = get(ContextKind::InvalidArg)
+            )
         }
         _ => error
             .to_string()
@@ -294,7 +353,9 @@ fn friendly(error: &clap::Error) -> String {
             .to_owned(),
     };
     format!(
-        "erreur : {body}\nEssayez `ha2lux --help`, ou `ha2lux <commande> --help` pour le détail d'une commande.\n"
+        "{}\n{}\n",
+        t!("cli-error", message = body),
+        t!("cli-usage-hint")
     )
 }
 
@@ -316,5 +377,39 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, UsageErr
             }
             _ => Err(UsageError(friendly(&error))),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Chaque commande et chaque argument de la CLI a son texte dans le catalogue
+    /// (sinon l'aide afficherait la description de repli, non traduite).
+    #[test]
+    fn every_command_and_argument_has_a_catalog_entry() {
+        fn walk(command: &clap::Command, path: &str, missing: &mut Vec<String>) {
+            if catalog(&format!("cli-cmd-{path}")).is_none() {
+                missing.push(format!("cli-cmd-{path}"));
+            }
+            for arg in command.get_arguments() {
+                let id = arg.get_id();
+                if catalog(&format!("cli-arg-{path}-{id}")).is_none() {
+                    missing.push(format!("cli-arg-{path}-{id}"));
+                }
+            }
+            for sub in command.get_subcommands() {
+                let name = sub.get_name();
+                let child = if path == "root" {
+                    name.to_owned()
+                } else {
+                    format!("{path}-{name}")
+                };
+                walk(sub, &child, missing);
+            }
+        }
+        let mut missing = Vec::new();
+        walk(&Cli::command(), "root", &mut missing);
+        assert!(missing.is_empty(), "clés manquantes : {missing:?}");
     }
 }

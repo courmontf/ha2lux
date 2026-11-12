@@ -1,0 +1,5 @@
+# Les tests comparent des textes en français : on fixe la langue (sans écraser
+# une valeur déjà exportée). Note : cela vaut aussi pour `cargo run` ; pour
+# essayer une autre langue, exportez HA2LUX_LANG=<code> avant.
+[env]
+HA2LUX_LANG = { value = "fr", force = false }

@@ -19,12 +19,13 @@ path = "src/main.rs"
 ha2lux-core.workspace = true
 ha2lux-backends = { path = "../ha2lux-backends" }
 tokio = { workspace = true, features = ["rt", "macros", "time"] }
-clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context"] }
+clap = { version = "4.6.7", default-features = false, features = ["derive", "std", "help", "usage", "error-context", "string"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 zbus = { version = "5.13.2", default-features = false, features = ["tokio"] }
 thiserror.workspace = true
 ha2lux-ipc = { path = "../ha2lux-ipc" }
+ha2lux-i18n = { path = "../ha2lux-i18n" }
 
 [lints]
 workspace = true

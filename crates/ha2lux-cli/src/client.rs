@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 
+use ha2lux_i18n::t;
 use ha2lux_ipc::{DaemonProxy, DisplayDto, ErrorKind, classify};
 use serde::Serialize;
 use zbus::zvariant::OwnedValue;
@@ -101,10 +102,8 @@ impl CallError {
     /// Message à l'attention de l'utilisateur.
     pub fn message(&self) -> String {
         match self {
-            Self::Absent(detail) => format!(
-                "le démon ha2luxd est absent ({detail}) ; lancez-le : systemctl --user start ha2luxd"
-            ),
-            Self::NoReply(detail) => format!("le démon ha2luxd ne répond pas ({detail})"),
+            Self::Absent(detail) => t!("cli-err-daemon-absent", detail = detail.as_str()),
+            Self::NoReply(detail) => t!("cli-err-daemon-no-reply", detail = detail.as_str()),
             Self::Usage(m) | Self::Failed(m) | Self::Other(m) => m.clone(),
         }
     }
@@ -235,7 +234,8 @@ pub struct ZbusDaemon {
 
 fn map_error(error: &zbus::Error) -> CallError {
     if let zbus::Error::MethodError(name, detail, _) = error {
-        let detail = detail.clone().unwrap_or_default();
+        // Le démon envoie une clé de catalogue + arguments : on la traduit ici.
+        let detail = ha2lux_i18n::wire::localize(&detail.clone().unwrap_or_default());
         if let Some(kind) = classify(error) {
             return match kind {
                 ErrorKind::Usage => CallError::Usage(detail),
@@ -245,13 +245,11 @@ fn map_error(error: &zbus::Error) -> CallError {
         return match name.as_str() {
             "org.freedesktop.DBus.Error.ServiceUnknown"
             | "org.freedesktop.DBus.Error.NameHasNoOwner" => {
-                CallError::Absent("aucun propriétaire pour org.ha2lux.Daemon".to_owned())
+                CallError::Absent(t!("cli-detail-no-owner"))
             }
             "org.freedesktop.DBus.Error.NoReply"
             | "org.freedesktop.DBus.Error.Timeout"
-            | "org.freedesktop.DBus.Error.TimedOut" => {
-                CallError::NoReply("délai dépassé".to_owned())
-            }
+            | "org.freedesktop.DBus.Error.TimedOut" => CallError::NoReply(t!("cli-detail-timeout")),
             other => CallError::Other(format!("{other} {detail}").trim().to_owned()),
         };
     }

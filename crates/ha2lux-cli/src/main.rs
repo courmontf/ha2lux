@@ -42,7 +42,7 @@ async fn main() -> ExitCode {
         Ok(daemon) => daemon,
         Err(error) => {
             return emit(&Outcome {
-                stderr: format!("erreur : {}\n", error.message()),
+                stderr: ha2lux_i18n::t!("cli-error", message = error.message()) + "\n",
                 code: error.exit_code(),
                 ..Outcome::default()
             });

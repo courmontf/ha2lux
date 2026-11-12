@@ -1,13 +1,14 @@
 //! Sélection d'un écran par numéro, nom exact ou sous-chaîne (spec §11.1).
 
+use std::fmt;
+
+use ha2lux_i18n::t;
 use ha2lux_ipc::DisplayDto;
-use thiserror::Error;
 
 /// Échec de sélection ; porte de quoi expliquer à l'utilisateur.
-#[derive(Debug, PartialEq, Eq, Error)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SelectError {
     /// Numéro hors de la liste (ou nul).
-    #[error("écran n°{given} introuvable ({count} écran(s))")]
     OutOfRange {
         /// Numéro demandé.
         given: String,
@@ -15,10 +16,8 @@ pub enum SelectError {
         count: usize,
     },
     /// Aucun écran ne correspond.
-    #[error("aucun écran ne correspond à « {0} »")]
     NotFound(String),
     /// Plusieurs écrans correspondent ; numéros (à partir de 1).
-    #[error("« {spec} » désigne plusieurs écrans : {}", candidates(.numbers))]
     Ambiguous {
         /// Texte saisi.
         spec: String,
@@ -27,9 +26,29 @@ pub enum SelectError {
     },
 }
 
+impl fmt::Display for SelectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OutOfRange { given, count } => f.write_str(&t!(
+                "cli-select-out-of-range",
+                given = given.as_str(),
+                count = count.to_string()
+            )),
+            Self::NotFound(spec) => f.write_str(&t!("cli-select-not-found", spec = spec.as_str())),
+            Self::Ambiguous { spec, numbers } => f.write_str(&t!(
+                "cli-select-ambiguous",
+                spec = spec.as_str(),
+                candidates = candidates(numbers)
+            )),
+        }
+    }
+}
+
+impl std::error::Error for SelectError {}
+
 fn candidates(list: &[usize]) -> String {
     list.iter()
-        .map(|n| format!("n°{n}"))
+        .map(|n| t!("cli-select-candidate", number = n.to_string()))
         .collect::<Vec<_>>()
         .join(", ")
 }

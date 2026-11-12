@@ -1,0 +1,15 @@
+[package]
+name = "ha2lux-i18n"
+description = "Internationalisation de ha2lux : catalogues Fluent embarqués et choix de la langue."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+fluent-bundle = "0.16"
+unic-langid = "0.9"
+
+[lints]
+workspace = true
