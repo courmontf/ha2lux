@@ -1,0 +1,48 @@
+name: Release
+
+# Publishes a GitHub release with the prebuilt archive when a version tag is pushed
+# (scripts/release.sh creates the tag; `git push --follow-tags` pushes it).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Oldest runner image available: the binaries only need the glibc they were built with,
+    # so building on an older one keeps them usable on older distributions.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: The tag must match the version in Cargo.toml
+        run: |
+          version=$(awk -F'"' '/^version *=/ { print $2; exit }' Cargo.toml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+      - name: Build
+        run: cargo build --release --locked
+      - name: Package
+        run: scripts/package.sh
+      - name: Smoke test (install from the archive into a throw-away HOME)
+        run: |
+          home=$(mktemp -d)
+          HOME="$home" scripts/install-release.sh --archive dist/ha2lux-x86_64-linux.tar.gz --no-start
+          "$home/.local/bin/ha2lux" --version
+          "$home/.local/bin/ha2luxd" --version
+      - name: Release notes (changelog section of this version)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" { found = 1; next } /^## \[/ { found = 0 } found' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Version $version." > notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/ha2lux-x86_64-linux.tar.gz dist/SHA256SUMS \
+            --title "ha2lux $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

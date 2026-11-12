@@ -31,6 +31,29 @@ Rust 1.85 ou plus récent (voir `rust-toolchain.toml`).
 
 ## Installation
 
+### Installation depuis une release (sans compiler)
+
+Des binaires précompilés pour Linux **x86_64** sont joints à chaque
+[release](https://github.com/courmontf/ha2lux/releases). Il ne faut que `curl`, `tar` et
+`sha256sum` (pas de chaîne Rust). L'installeur vérifie la somme SHA-256 de l'archive, puis
+installe pour votre utilisateur, sans sudo :
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/courmontf/ha2lux/main/scripts/install-release.sh
+less install-release.sh        # lisez-le avant de l'exécuter
+bash install-release.sh        # ou : bash install-release.sh --version v0.8.0
+```
+
+Il installe les programmes dans `~/.local/bin`, les fichiers de service utilisateur, puis démarre
+le démon et l'icône. Relancez-le pour mettre à jour. Pour les moniteurs externes, il affiche les
+deux commandes qui demandent `sudo` (accès I²C) ; il ne les exécute jamais lui-même. Voir aussi
+les *Notes* plus bas.
+
+Sans le script : téléchargez `ha2lux-x86_64-linux.tar.gz` et `SHA256SUMS` depuis la page de la
+release, vérifiez avec `sha256sum -c SHA256SUMS`, décompressez et lancez le `install.sh`
+qu'elle contient (il installe les fichiers à côté de lui ; `--no-start` installe sans rien
+démarrer).
+
 ### Installation rapide (depuis les sources)
 
 Il faut une chaîne Rust 1.85 ou plus récente ([rustup](https://rustup.rs)) et un éditeur de liens
@@ -77,7 +100,8 @@ Remarques :
 
 ### Mise à jour
 
-Un script fait tout (compilation, installation, redémarrage du démon et de l'icône) :
+Installé depuis une release : relancez `install-release.sh` (voir plus haut). Depuis les sources,
+un script fait tout (compilation, installation, redémarrage du démon et de l'icône) :
 `scripts/update.sh` (ou `scripts/update.sh --pull` pour récupérer d'abord les dernières sources).
 Équivalent à la main :
 
@@ -98,6 +122,7 @@ si elles diffèrent.
 systemctl --user disable --now ha2luxd; pkill -x ha2lux-tray
 rm -f ~/.local/bin/{ha2luxd,ha2lux,ha2lux-tray} ~/.config/systemd/user/ha2luxd.service \
       ~/.local/share/dbus-1/services/org.ha2lux.Daemon.service ~/.config/autostart/ha2lux-tray.desktop
+rm -rf ~/.local/share/ha2lux      # copies conservées par l'installeur de release
 sudo rm -f /etc/udev/rules.d/60-ha2lux-i2c.rules /etc/modules-load.d/ha2lux-i2c-dev.conf
 ```
 

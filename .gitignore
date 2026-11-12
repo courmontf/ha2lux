@@ -25,3 +25,4 @@ rustc-ice-*.txt
 /fuzz/artifacts
 /fuzz/Cargo.lock
 /specs
+/dist
