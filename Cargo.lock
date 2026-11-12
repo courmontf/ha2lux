@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-backends"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "ha2lux-core",
  "ha2lux-i18n",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-cli"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "clap",
  "ha2lux-backends",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-core"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "proptest",
  "serde",
@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-ha"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -772,7 +772,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-i18n"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "fluent-bundle",
  "ha2lux-core",
@@ -782,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-ipc"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "ha2lux-core",
  "serde",
@@ -791,7 +791,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-secrets"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "futures-util",
  "ha2lux-core",
@@ -807,7 +807,7 @@ dependencies = [
 
 [[package]]
 name = "ha2lux-tray"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "futures-util",
  "ha2lux-backends",
@@ -825,7 +825,7 @@ dependencies = [
 
 [[package]]
 name = "ha2luxd"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "futures-util",

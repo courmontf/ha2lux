@@ -3,6 +3,16 @@
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ;
 versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [0.8.0] - 2026-11-12
+
+### Nouveautés
+
+- **release** : installation depuis une release, sans compiler (90ab53e)
+
+### Autres changements
+
+- chore(scripts): ajoute scripts/update.sh pour recompiler et réinstaller (4150b75)
+
 ## [0.7.1] - 2026-11-12
 
 ### Autres changements
