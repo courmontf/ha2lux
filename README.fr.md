@@ -77,6 +77,10 @@ Remarques :
 
 ### Mise à jour
 
+Un script fait tout (compilation, installation, redémarrage du démon et de l'icône) :
+`scripts/update.sh` (ou `scripts/update.sh --pull` pour récupérer d'abord les dernières sources).
+Équivalent à la main :
+
 ```sh
 git pull && cargo build --release \
 && install -Dm755 target/release/ha2luxd target/release/ha2lux target/release/ha2lux-tray -t ~/.local/bin/ \

@@ -74,6 +74,10 @@ Notes:
 
 ### Update
 
+A script does it all (build, install, restart the daemon and the icon):
+`scripts/update.sh` (or `scripts/update.sh --pull` to fetch the latest sources first).
+By hand, the equivalent is:
+
 ```sh
 git pull && cargo build --release \
 && install -Dm755 target/release/ha2luxd target/release/ha2lux target/release/ha2lux-tray -t ~/.local/bin/ \
