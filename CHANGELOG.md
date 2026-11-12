@@ -3,6 +3,17 @@
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ;
 versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [0.7.0] - 2026-11-12
+
+### Nouveautés
+
+- **i18n** : langue réglable dans config.toml ([general] language) (ae9fdc3)
+- **tray** : « Recharger la configuration » dans le menu, langue changée à chaud (2ada2c4)
+
+### Autres changements
+
+- chore(build): réduit les informations de débogage du profil dev (a97392e)
+
 ## [0.6.0] - 2026-11-12
 
 ### Nouveautés
