@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Avertit (sans bloquer) si le message de commit ne suit pas Conventional Commits :
+#   type(portée)!: description      types : feat, fix, perf, docs, refactor, test, build, ci, chore, style, i18n
+# `scripts/release.sh` en déduit la prochaine version (feat -> mineur, fix/perf -> patch, ! -> incompatible).
+set -euo pipefail
+subject=$(head -n1 "$1")
+case "$subject" in
+    Merge\ * | Revert\ * | fixup\!\ * | squash\!\ * | amend\!\ *) exit 0 ;;
+esac
+re='^(feat|fix|perf|docs|refactor|test|build|ci|chore|style|i18n)(\([^)]+\))?!?: .+'
+if ! [[ "$subject" =~ $re ]]; then
+    {
+        echo "[commit-msg] attention : « $subject »"
+        echo "             ne suit pas « type(portée): description » (feat, fix, perf, docs, refactor, test, build, ci, chore, style, i18n)."
+        echo "             Ce commit ne comptera pas pour le calcul automatique de la version (scripts/release.sh)."
+    } >&2
+fi
+exit 0

@@ -193,6 +193,31 @@ The token is bound to the host:port: changing the address means entering it agai
 adjustments (shortcut, wheel, preset…) are **learned**: the lux → level curve adapts (undoable:
 `ha2lux auto reset-curve`). If Home Assistant is unreachable, the schedule takes over.
 
+## Releases and versioning
+
+Versions follow [SemVer](https://semver.org) and commits follow
+[Conventional Commits](https://www.conventionalcommits.org) (`type(scope): description`):
+
+| Commit | Bump |
+|---|---|
+| `feat: …` | minor (0.5.0 → 0.6.0) |
+| `fix: …`, `perf: …` | patch (0.5.0 → 0.5.1) |
+| `type!: …` or a `BREAKING CHANGE:` line in the body | major (minor while the version is 0.x) |
+| `docs`, `chore`, `refactor`, `test`, `ci`, `build`, `style`, `i18n` | none on their own |
+
+`scripts/release.sh` reads the commits since the last version, picks the next number, updates
+`Cargo.toml`, `Cargo.lock`, the RPM and Arch packaging and `CHANGELOG.md`, then commits
+(`chore(release): vX.Y.Z`) and tags it. It never pushes:
+
+```sh
+scripts/release.sh --dry-run     # show the next version and the changelog, change nothing
+scripts/release.sh               # create the release (asks for confirmation)
+git push --follow-tags           # publish it
+```
+
+`--bump major|minor|patch` forces the level (for example to reach 1.0.0). A `commit-msg` hook
+(enabled by `scripts/install-hooks.sh`) warns when a message does not follow the convention.
+
 ## Languages
 
 The interface (CLI, icon, daemon messages, `ha2lux doctor`) is available in **English** and

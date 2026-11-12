@@ -199,6 +199,31 @@ Le jeton est lié à l'hôte:port : changer d'adresse oblige à le ressaisir. Vo
 (raccourci, molette, preset…) sont **appris** : la courbe lux → niveau s'adapte (annulable :
 `ha2lux auto reset-curve`). Si Home Assistant est injoignable, le planning prend le relais.
 
+## Versions et publication
+
+Les versions suivent [SemVer](https://semver.org/lang/fr/) et les commits suivent
+[Conventional Commits](https://www.conventionalcommits.org/fr/) (`type(portée): description`) :
+
+| Commit | Version |
+|---|---|
+| `feat: …` | mineure (0.5.0 → 0.6.0) |
+| `fix: …`, `perf: …` | correctif (0.5.0 → 0.5.1) |
+| `type!: …` ou une ligne `BREAKING CHANGE:` dans le corps | majeure (mineure tant que la version est 0.x) |
+| `docs`, `chore`, `refactor`, `test`, `ci`, `build`, `style`, `i18n` | aucune à eux seuls |
+
+`scripts/release.sh` lit les commits depuis la dernière version, choisit le numéro suivant, met à
+jour `Cargo.toml`, `Cargo.lock`, les paquets RPM et Arch et `CHANGELOG.md`, puis commite
+(`chore(release): vX.Y.Z`) et crée le tag. Il ne pousse jamais :
+
+```sh
+scripts/release.sh --dry-run     # affiche la prochaine version et le changelog, ne change rien
+scripts/release.sh               # crée la version (demande confirmation)
+git push --follow-tags           # la publie
+```
+
+`--bump major|minor|patch` impose le niveau (par exemple pour passer en 1.0.0). Un hook
+`commit-msg` (activé par `scripts/install-hooks.sh`) avertit si un message ne suit pas la convention.
+
 ## Langues
 
 L'interface (CLI, icône, messages du démon, `ha2lux doctor`) existe en **français** et en
