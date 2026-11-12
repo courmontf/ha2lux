@@ -1,9 +1,9 @@
-//! Fichier d'état (`state.toml`) : ce que ha2lux mémorise lui-même, hors
-//! configuration éditée à la main (spec §10.1). Partie pure, sans E/S.
+//! State file (`state.toml`): what ha2lux remembers itself, outside the
+//! hand-edited configuration (spec §10.1). Pure part, no I/O.
 //!
-//! Contenu : maître courant, suspension du planning, courbe apprise, dernier
-//! écran vu. **Jamais** persisté : atténuation d'inactivité, rampes, santé de
-//! Home Assistant, valeurs lues (spec §10.3).
+//! Contents: current master, schedule suspension, learned curve, last
+//! display seen. **Never** persisted: idle dimming, ramps, Home Assistant
+//! health, values read (spec §10.3).
 
 use serde::Serialize;
 use toml::{Table, Value};
@@ -12,19 +12,19 @@ use crate::config::{ConfigError, ConfigIssue, Severity};
 use crate::curve::Curve;
 use crate::schedule::{MinuteOfDay, Suspension};
 
-/// Version courante du schéma d'état.
+/// Current version of the state schema.
 pub const STATE_VERSION: u32 = 1;
 
-/// État persisté.
+/// Persisted state.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct State {
-    /// Dernier maître décidé.
+    /// Last master decided.
     pub master: Option<u8>,
-    /// Suspension du planning en cours.
+    /// Schedule suspension in progress.
     pub suspension: Option<Suspension>,
-    /// Courbe apprise (vide = courbe par défaut).
+    /// Learned curve (empty = default curve).
     pub curve: Curve,
-    /// Dernier écran vu (identité).
+    /// Last display seen (identity).
     pub last_display: Option<String>,
 }
 
@@ -76,9 +76,9 @@ fn read_suspension(value: &Value, issues: &mut Vec<ConfigIssue>) -> Option<Suspe
 }
 
 impl State {
-    /// Lit un état. Les champs fautifs sont ignorés avec une remarque ; une
-    /// erreur de syntaxe ou une version plus récente sont fatales (l'appelant
-    /// conserve alors le fichier tel quel).
+    /// Reads a state. Faulty fields are ignored with a remark; a
+    /// syntax error or a newer version are fatal (the caller then
+    /// keeps the file as is).
     pub fn parse(text: &str) -> Result<(Self, Vec<ConfigIssue>), ConfigError> {
         let root: Table = text.parse().map_err(|e: toml::de::Error| {
             let line = e.span().map_or(1, |s| {
@@ -142,7 +142,7 @@ impl State {
         ))
     }
 
-    /// Sérialise en TOML.
+    /// Serializes to TOML.
     pub fn to_toml(&self) -> Result<String, ConfigError> {
         let dto = StateDto {
             version: STATE_VERSION,

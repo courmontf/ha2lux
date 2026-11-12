@@ -1,4 +1,4 @@
-//! T-SCH : planning (spec §6).
+//! T-SCH: schedule (spec §6).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{MAX_POINTS, MinuteOfDay, Point, Schedule, ScheduleError, Suspension};
 

@@ -1,9 +1,9 @@
-//! Sources d'événements système : hotplug d'écrans (netlink, repli par sondage de
-//! sysfs) et logind (veille, réveil, verrouillage, session active).
+//! System event sources: display hotplug (netlink, fallback by polling
+//! sysfs) and logind (sleep, wake-up, lock, active session).
 //!
-//! Chaque source traduit ce qu'elle voit en [`SystemEvent`] et l'envoie à l'acteur,
-//! qui décide (débounce, plancher, ré-application). Aucune source n'agit sur le
-//! matériel elle-même.
+//! Each source translates what it sees into a [`SystemEvent`] and sends it to the actor,
+//! which decides (debounce, floor, re-application). No source acts on the
+//! hardware itself.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -19,21 +19,21 @@ use netlink_sys::{AsyncSocket, AsyncSocketExt, SocketAddr, TokioSocket};
 
 use crate::actor::{DaemonHandle, SystemEvent};
 
-/// Événement du noyau (uevent), tel que lu sur le socket netlink.
+/// Kernel event (uevent), as read on the netlink socket.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Uevent {
-    /// `add`, `remove`, `change`…
+    /// `add`, `remove`, `change`...
     pub action: String,
-    /// Chemin de l'appareil dans `/sys`.
+    /// Device path in `/sys`.
     pub devpath: String,
-    /// Sous-système (`drm`, `i2c-dev`…), s'il est fourni.
+    /// Subsystem (`drm`, `i2c-dev`...), if provided.
     pub subsystem: Option<String>,
-    /// Autres variables `CLÉ=VALEUR`.
+    /// Other `KEY=VALUE` variables.
     pub vars: Vec<(String, String)>,
 }
 
 impl Uevent {
-    /// Valeur d'une variable.
+    /// Value of a variable.
     pub fn var(&self, key: &str) -> Option<&str> {
         self.vars
             .iter()
@@ -42,8 +42,8 @@ impl Uevent {
     }
 }
 
-/// Analyse un message du noyau : `action@devpath\0CLÉ=VALEUR\0…`. Les messages qui
-/// ne respectent pas ce format (dont les messages `libudev` binaires) sont ignorés.
+/// Parses a kernel message: `action@devpath\0KEY=VALUE\0...`. Messages that
+/// do not follow this format (including binary `libudev` messages) are ignored.
 pub fn parse_uevent(buffer: &[u8]) -> Option<Uevent> {
     let mut parts = buffer.split(|b| *b == 0).filter(|p| !p.is_empty());
     let head = std::str::from_utf8(parts.next()?).ok()?;
@@ -78,8 +78,8 @@ pub fn parse_uevent(buffer: &[u8]) -> Option<Uevent> {
     Some(event)
 }
 
-/// Vrai si l'événement concerne les écrans : changement de connecteur DRM
-/// (`HOTPLUG=1`, ou ajout/retrait) ou apparition/disparition d'un nœud `i2c-dev`.
+/// True if the event concerns displays: DRM connector change
+/// (`HOTPLUG=1`, or add/remove) or appearance/disappearance of an `i2c-dev` node.
 pub fn is_display_event(event: &Uevent) -> bool {
     match event.subsystem.as_deref() {
         Some("drm") => {
@@ -90,15 +90,15 @@ pub fn is_display_event(event: &Uevent) -> bool {
     }
 }
 
-/// Écoute les événements du noyau (groupe netlink 1) et signale chaque changement
-/// d'écran. Ne rend la main qu'en cas d'erreur du socket.
+/// Listens to kernel events (netlink group 1) and signals each display
+/// change. Only returns on a socket error.
 pub async fn watch_uevents(handle: DaemonHandle) -> io::Result<()> {
     let mut socket = TokioSocket::new(NETLINK_KOBJECT_UEVENT)?;
-    // Groupe 1 : événements émis par le noyau lui-même (le groupe 2 est celui d'udev).
+    // Group 1: events emitted by the kernel itself (group 2 is udev's).
     socket.socket_mut().bind(&SocketAddr::new(0, 1))?;
     loop {
         let (buffer, sender) = socket.recv_from_full().await?;
-        // Un message légitime du groupe 1 vient du noyau (port 0) ; on ignore le reste.
+        // A legitimate group 1 message comes from the kernel (port 0); the rest is ignored.
         if sender.port_number() != 0 {
             continue;
         }
@@ -111,7 +111,7 @@ pub async fn watch_uevents(handle: DaemonHandle) -> io::Result<()> {
     }
 }
 
-/// Empreinte de l'état des connecteurs : statut, EDID, bus DDC.
+/// Fingerprint of the connectors' state: status, EDID, DDC bus.
 pub fn connector_signature(drm_dir: &std::path::Path) -> u64 {
     let mut hasher = DefaultHasher::new();
     for connector in drm::scan(drm_dir) {
@@ -127,8 +127,8 @@ pub fn connector_signature(drm_dir: &std::path::Path) -> u64 {
     hasher.finish()
 }
 
-/// Repli quand netlink est indisponible : sonde périodiquement sysfs et signale un
-/// changement des connecteurs. Se termine quand le démon s'arrête.
+/// Fallback when netlink is unavailable: periodically polls sysfs and signals a
+/// connector change. Ends when the daemon stops.
 pub async fn poll_connectors(drm_dir: PathBuf, handle: DaemonHandle, period: Duration) {
     let scan = |dir: PathBuf| async move {
         tokio::task::spawn_blocking(move || connector_signature(&dir))
@@ -179,9 +179,9 @@ mod proxies {
 
 use proxies::{LoginManagerProxy, LoginSessionProxy};
 
-/// Surveille logind sur `connection` (bus système) : préparation de veille et retour,
-/// verrouillage/déverrouillage, session active ou non. Ne rend la main que si le
-/// démon s'arrête ou qu'une erreur de bus survient.
+/// Watches logind on `connection` (system bus): sleep preparation and resume,
+/// lock/unlock, session active or not. Only returns if the
+/// daemon stops or a bus error occurs.
 pub async fn watch_logind(
     connection: zbus::Connection,
     session_id: Option<String>,
@@ -190,8 +190,8 @@ pub async fn watch_logind(
     let manager = LoginManagerProxy::new(&connection).await?;
     let mut sleep = manager.receive_prepare_for_sleep().await?;
 
-    // La session peut être introuvable (service systemd sans session graphique) : on
-    // garde alors la surveillance de la veille, sans verrouillage ni changement de session.
+    // The session may be missing (systemd service without a graphical session): the
+    // sleep watching is then kept, without lock or session-change handling.
     let session = match resolve_session_path(&connection, session_id.as_deref()).await {
         Ok(path) => Some(
             LoginSessionProxy::builder(&connection)

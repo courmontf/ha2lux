@@ -1,15 +1,15 @@
-# NON TESTÉ : squelette de paquet Arch Linux. À valider sur une machine Arch avant tout usage.
+# UNTESTED: Arch Linux package skeleton. Validate on an Arch machine before any use.
 pkgname=ha2lux
 pkgver=0.7.0
 pkgrel=1
-pkgdesc="Réglage de la luminosité de tous les écrans (DDC/CI, backlight) — démon, CLI et icône"
+pkgdesc="Brightness control for all displays (DDC/CI, backlight) — daemon, CLI and tray icon"
 arch=('x86_64' 'aarch64')
-url="https://example.invalid/ha2lux"   # à renseigner
+url="https://example.invalid/ha2lux"   # to be filled in
 license=('MIT')
 depends=('dbus' 'i2c-tools')
 makedepends=('cargo')
-optdepends=('pipewire: détection micro/caméra pour l atténuation'
-            'libsecret: trousseau pour le jeton Home Assistant')
+optdepends=('pipewire: microphone/camera detection for idle dimming'
+            'libsecret: keyring for the Home Assistant token')
 source=("$pkgname-$pkgver.tar.gz")
 sha256sums=('SKIP')
 

@@ -1,4 +1,4 @@
-//! Horloge virtuelle : le temps n'avance que sur demande, minuit boucle.
+//! Virtual clock: time only advances on request, midnight wraps around.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{Clock, MinuteOfDay, VirtualClock};
 

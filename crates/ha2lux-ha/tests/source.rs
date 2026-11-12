@@ -1,4 +1,4 @@
-//! Superviseur de la source (T-HA-11..15) : faux lien, temps virtuel, aucun socket.
+//! Source supervisor (T-HA-11..15): fake link, virtual time, no socket.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::VecDeque;
@@ -52,7 +52,7 @@ impl Feed for FakeFeed {
     async fn ping(&mut self) -> Result<(), HaError> {
         self.state.pings.fetch_add(1, Ordering::SeqCst);
         if self.auto_pong {
-            // Le récepteur peut avoir disparu : sans importance.
+            // The receiver may have gone away: irrelevant.
             let _ = self.reply.send(Ok(FeedEvent::Pong));
         }
         Ok(())
@@ -265,7 +265,7 @@ async fn startup_reads_at_once_then_connects_the_websocket_and_slows_down_to_a_r
     assert!(out.contains(&Output::Websocket(true)), "{out:?}");
     assert!(out.contains(&Output::Raw("42".into())));
     assert_eq!(rig.state.connects_count(), 1);
-    // WebSocket actif : plus de repli à 15 s, seulement un rafraîchissement REST à 60 s.
+    // WebSocket active: no more 15 s fallback, only a REST refresh at 60 s.
     rig.advance(Duration::from_secs(50)).await;
     assert_eq!(
         rig.state.reads_count(),
@@ -354,12 +354,12 @@ async fn t_ha_12_six_failed_reads_mean_offline_and_one_success_restores() {
         s.set_default_connect(Err(HaError::Connection("refusé".into())));
         s.set_default_read(Err(HaError::Connection("coupé".into())));
     });
-    rig.advance(Duration::from_secs(74)).await; // lectures à 0, 15, 30, 45, 60 : 5 échecs
+    rig.advance(Duration::from_secs(74)).await; // reads at 0, 15, 30, 45, 60: 5 failures
     assert!(
         health(&rig.drain()).is_empty(),
         "5 échecs : pas encore hors ligne"
     );
-    rig.advance(Duration::from_secs(2)).await; // 6e lecture à 75 s
+    rig.advance(Duration::from_secs(2)).await; // 6th read at 75 s
     assert_eq!(
         health(&rig.drain()),
         [HaHealth::Offline],
@@ -418,8 +418,8 @@ async fn t_ha_13_unavailable_beyond_the_fallback_delay_is_degraded_then_recovers
 
 #[tokio::test(start_paused = true)]
 async fn degraded_is_detected_even_without_any_new_response() {
-    // WebSocket actif et silencieux, rafraîchissement REST « unavailable » : la dégradation
-    // doit venir du temps qui passe, pas d'un événement.
+    // WebSocket active and silent, REST refresh « unavailable »: the degradation
+    // must come from the passage of time, not from an event.
     let mut rig = start(|s, _| {
         s.push_read(Ok(lux(20.0)));
         s.set_default_read(Ok(no_value()));
@@ -432,7 +432,7 @@ async fn degraded_is_detected_even_without_any_new_response() {
 async fn t_ha_11_stale_measurements_are_ignored_even_though_the_link_is_fine() {
     let mut rig = start(|s, _| {
         s.set_default_connect(Err(HaError::Connection("refusé".into())));
-        // Mesure vieille de 11 min d'après l'horodatage de Home Assistant.
+        // Measurement 11 min old according to Home Assistant's timestamp.
         let stale = Reading {
             observed_ms: Some(BASE_UNIX_MS - 11 * 60_000),
             ..lux(80.0)
@@ -450,7 +450,7 @@ async fn t_ha_11_stale_measurements_are_ignored_even_though_the_link_is_fine() {
         out.contains(&Output::Raw("80".into())),
         "l'état brut reste affiché"
     );
-    // Une mesure fraîche (last_reported récent) est utilisée.
+    // A fresh measurement (recent last_reported) is used.
     let fresh = Reading {
         observed_ms: Some(BASE_UNIX_MS + 59_000 - 30_000),
         ..lux(81.0)
@@ -479,7 +479,7 @@ async fn t_ha_14_a_refused_token_stops_all_attempts_for_five_minutes() {
         attempts <= 2,
         "au plus la première tentative (WebSocket et lecture) : {attempts}"
     );
-    // Après 5 minutes, une seule nouvelle tentative, puis le silence recommence.
+    // After 5 minutes, a single new attempt, then the silence starts again.
     rig.advance(Duration::from_secs(20)).await;
     let after_pause = rig.state.connects_count() + rig.state.reads_count();
     assert!(
@@ -526,9 +526,9 @@ async fn the_heartbeat_pings_every_30_seconds_and_a_missing_pong_drops_the_webso
         1,
         "les pongs maintiennent le flux"
     );
-    // Plus de réponse : abandon après 10 s, puis reconnexion.
+    // No more response: give up after 10 s, then reconnect.
     *rig.state.auto_pong.lock().unwrap() = false;
-    rig.state.send_feed(Err(HaError::Connection("x".into()))); // force une reconnexion avec un flux sans pong
+    rig.state.send_feed(Err(HaError::Connection("x".into()))); // forces a reconnection with a stream that has no pong
     rig.advance(Duration::from_secs(3)).await;
     rig.drain();
     rig.advance(Duration::from_secs(45)).await;

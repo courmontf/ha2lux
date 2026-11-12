@@ -1,12 +1,12 @@
-//! Modèle de configuration, lecture tolérante et sérialisation TOML (spec §10).
+//! Configuration model, tolerant reading and TOML serialization (spec §10).
 //!
-//! Partie pure : aucune E/S. La lecture ne perd jamais la configuration : une
-//! clé fautive reprend sa valeur par défaut (ou est bornée) et un
-//! [`ConfigIssue`] est consigné ; seules une erreur de syntaxe TOML ou une
-//! version de schéma trop récente sont fatales.
+//! Pure part: no I/O. Reading never loses the configuration: a
+//! faulty key falls back to its default value (or is clamped) and a
+//! [`ConfigIssue`] is recorded; only a TOML syntax error or a
+//! schema version that is too recent are fatal.
 //!
-//! Les valeurs des clés ne sont jamais recopiées dans les messages : un jeton
-//! mal placé dans le fichier ne peut donc pas fuiter dans les journaux.
+//! Key values are never copied into messages: a token
+//! misplaced in the file therefore cannot leak into the logs.
 
 use serde::{Serialize, Serializer};
 use thiserror::Error;
@@ -19,89 +19,89 @@ use crate::range::Range;
 use crate::schedule::{MAX_POINTS, MinuteOfDay, Point, Schedule, ScheduleError};
 use crate::url::{UrlNote, check_url};
 
-/// Version courante du schéma de configuration.
+/// Current version of the configuration schema.
 pub const CONFIG_VERSION: u32 = 1;
-/// Nombre maximal de presets.
+/// Maximum number of presets.
 pub const MAX_PRESETS: usize = 10;
-/// Nombre maximal d'écrans mémorisés.
+/// Maximum number of remembered displays.
 pub const MAX_DISPLAYS: usize = 32;
-/// Longueur maximale d'un nom de preset.
+/// Maximum length of a preset name.
 pub const MAX_PRESET_NAME: usize = 63;
-/// Longueur maximale d'un identifiant d'entité.
+/// Maximum length of an entity identifier.
 pub const MAX_ENTITY_LEN: usize = 127;
 
-/// Erreurs fatales de lecture ou d'écriture de configuration.
+/// Fatal errors when reading or writing the configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ConfigError {
-    /// Syntaxe TOML invalide.
+    /// Invalid TOML syntax.
     #[error("unreadable configuration (line {line}): {message}")]
     Syntax {
-        /// Ligne approximative de l'erreur (1 si inconnue).
+        /// Approximate line of the error (1 if unknown).
         line: usize,
-        /// Message de l'analyseur, sans extrait du fichier.
+        /// Parser message, without an excerpt of the file.
         message: String,
     },
-    /// Schéma plus récent que ce binaire.
+    /// Schema newer than this binary.
     #[error("version de configuration {found} non prise en charge (maximum {supported})")]
     UnsupportedVersion {
-        /// Version trouvée dans le fichier.
+        /// Version found in the file.
         found: i64,
-        /// Version maximale connue.
+        /// Highest known version.
         supported: u32,
     },
-    /// Échec de sérialisation.
+    /// Serialization failure.
     #[error("serialization failed: {0}")]
     Serialize(String),
 }
 
-/// Gravité d'une remarque de lecture.
+/// Severity of a reading remark.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Severity {
-    /// Information (valeur corrigée sans perte).
+    /// Information (value corrected without loss).
     Info,
-    /// Avertissement (valeur remplacée ou ignorée).
+    /// Warning (value replaced or ignored).
     Warning,
 }
 
-/// Remarque produite pendant la lecture (jamais de valeur sensible).
+/// Remark produced while reading (never a sensitive value).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfigIssue {
-    /// Gravité.
+    /// Severity.
     pub severity: Severity,
-    /// Chemin de la clé (ex. `idle.minutes`).
+    /// Key path (e.g. `idle.minutes`).
     pub path: String,
-    /// Description lisible.
+    /// Human-readable description.
     pub message: String,
 }
 
-/// Résultat d'une lecture : configuration et remarques.
+/// Result of a read: configuration and remarks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Loaded {
-    /// Configuration validée.
+    /// Validated configuration.
     pub config: Config,
-    /// Corrections appliquées.
+    /// Corrections applied.
     pub issues: Vec<ConfigIssue>,
 }
 
-/// Réglages généraux.
+/// General settings.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct General {
-    /// Pas de la molette/des raccourcis (1-50).
+    /// Step of the wheel/shortcuts (1-50).
     pub step: u8,
-    /// Associer les écrans à leurs bus DDC en lisant l'EDID sur les adaptateurs
-    /// GPU (pilote NVIDIA propriétaire, sans lien `ddc` dans sysfs). Désactivé
-    /// par défaut : cela effectue de vraies lectures I²C (décision 48).
+    /// Associate displays with their DDC buses by reading the EDID on the GPU
+    /// adapters (proprietary NVIDIA driver, no `ddc` link in sysfs). Disabled
+    /// by default: this performs real I²C reads (decision 48).
     pub edid_bus_matching: bool,
-    /// Langue de l'interface : `auto` (suit la session) ou un code de langue (`fr`, `en`…).
-    /// Le choix de la langue elle-même (et le repli sur une langue absente) est fait par
-    /// `ha2lux-i18n`, qui seul connaît les langues disponibles.
+    /// Interface language: `auto` (follows the session) or a language code (`fr`, `en`…).
+    /// The choice of the language itself (and the fallback to a missing language) is made by
+    /// `ha2lux-i18n`, which alone knows the available languages.
     pub language: String,
 }
 
-/// Valeur par défaut de [`General::language`].
+/// Default value of [`General::language`].
 pub const LANGUAGE_AUTO: &str = "auto";
 
-/// Vrai pour `auto` ou un code de langue simple (`fr`, `en`, `pt-br`).
+/// True for `auto` or a simple language code (`fr`, `en`, `pt-br`).
 fn valid_language(code: &str) -> bool {
     code == LANGUAGE_AUTO
         || (code.len() <= 8
@@ -114,75 +114,75 @@ fn valid_language(code: &str) -> bool {
             && code.chars().next().is_some_and(|c| c.is_ascii_lowercase()))
 }
 
-/// Preset nommé.
+/// Named preset.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Preset {
-    /// Nom (1-63 caractères).
+    /// Name (1-63 characters).
     pub name: String,
-    /// Niveau maître 0-100.
+    /// Master level 0-100.
     pub level: u8,
 }
 
-/// Configuration mémorisée d'un écran.
+/// Remembered configuration of a display.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayEntry {
-    /// Identifiant stable (clé EDID).
+    /// Stable identifier (EDID key).
     pub id: String,
-    /// Plage de l'écran.
+    /// Range of the display.
     pub range: Range,
-    /// Plancher backlight, en valeur brute.
+    /// Backlight floor, as a raw value.
     pub floor: u32,
 }
 
-/// Planning.
+/// Schedule.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ScheduleConfig {
-    /// Planning activé.
+    /// Schedule enabled.
     pub enabled: bool,
-    /// Points validés (triés, sans doublon, ≤ 24).
+    /// Validated points (sorted, no duplicates, ≤ 24).
     #[serde(serialize_with = "ser_points")]
     pub points: Vec<Point>,
 }
 
-/// Atténuation à l'inactivité.
+/// Idle dimming.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct IdleConfig {
-    /// Fonction activée.
+    /// Feature enabled.
     pub enabled: bool,
-    /// Niveau d'atténuation 0-100.
+    /// Dimming level 0-100.
     pub level: u8,
-    /// Délai en minutes (1-1440).
+    /// Delay in minutes (1-1440).
     pub minutes: u16,
-    /// Niveau absolu (non remappé par la plage).
+    /// Absolute level (not remapped by the range).
     pub level_is_absolute: bool,
 }
 
-/// Réglages fins de l'auto-luminosité (`auto.tuning.*`).
+/// Fine settings for auto-brightness (`auto.tuning.*`).
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Tuning {
-    /// Filtre : écart log d'un grand changement.
+    /// Filter: log gap of a large change.
     pub big_log_delta: f64,
-    /// Filtre : écart en lux d'un grand changement.
+    /// Filter: gap in lux of a large change.
     pub big_lux_delta: f64,
-    /// Filtre : coefficient de lissage.
+    /// Filter: smoothing coefficient.
     pub alpha: f64,
-    /// Filtre : proximité de confirmation.
+    /// Filter: confirmation closeness.
     pub confirm_close: f64,
-    /// Porte : écart d'application immédiate.
+    /// Gate: gap for immediate application.
     pub gate_immediate: u8,
-    /// Porte : écart minimal.
+    /// Gate: minimum gap.
     pub gate_minimum: u8,
-    /// Porte : confirmations requises.
+    /// Gate: confirmations required.
     pub gate_confirmations: u8,
-    /// Rampe : durée d'un pas en ms (jamais plus rapide que le bus).
+    /// Ramp: step duration in ms (never faster than the bus).
     pub ramp_step_ms: u32,
-    /// Apprentissage : plancher d'écart (0 = désactivé).
+    /// Learning: gap floor (0 = disabled).
     pub learn_min_delta: u8,
-    /// Apprentissage : contradictions tolérées avant refus.
+    /// Learning: contradictions tolerated before rejection.
     pub learn_max_contradicted: u8,
-    /// Apprentissage : ancienneté maximale d'un point en jours (0 = illimitée).
+    /// Learning: maximum age of a point in days (0 = unlimited).
     pub learn_max_age_days: u32,
-    /// Durée de pause de l'auto après un preset, en minutes.
+    /// Auto pause duration after a preset, in minutes.
     pub preset_pause_minutes: u32,
 }
 
@@ -208,7 +208,7 @@ impl Default for Tuning {
 }
 
 impl Tuning {
-    /// Réglages du filtre.
+    /// Filter settings.
     pub fn filter_params(&self) -> FilterParams {
         FilterParams {
             big_log_delta: self.big_log_delta,
@@ -218,7 +218,7 @@ impl Tuning {
         }
     }
 
-    /// Réglages de la porte.
+    /// Gate settings.
     pub fn gate_params(&self) -> GateParams {
         GateParams {
             immediate: self.gate_immediate,
@@ -227,7 +227,7 @@ impl Tuning {
         }
     }
 
-    /// Garde-fous d'apprentissage.
+    /// Learning safeguards.
     pub fn learn_policy(&self) -> LearnPolicy {
         LearnPolicy {
             min_delta: self.learn_min_delta,
@@ -236,45 +236,45 @@ impl Tuning {
     }
 }
 
-/// Auto-luminosité Home Assistant. Le jeton n'apparaît jamais ici.
+/// Home Assistant auto-brightness. The token never appears here.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AutoConfig {
-    /// Fonction activée (exige URL et entité, plus le jeton côté démon).
+    /// Feature enabled (requires URL and entity, plus the token on the daemon side).
     pub enabled: bool,
-    /// URL normalisée de Home Assistant.
+    /// Normalized Home Assistant URL.
     pub url: String,
-    /// Identifiant de l'entité (`sensor.xxx`).
+    /// Entity identifier (`sensor.xxx`).
     pub entity: String,
-    /// Libellé d'affichage.
+    /// Display label.
     pub label: String,
-    /// Période du repli REST en secondes (5-300).
+    /// REST fallback period in seconds (5-300).
     pub poll_seconds: u32,
-    /// Péremption d'une mesure en secondes.
+    /// Staleness of a measurement in seconds.
     pub stale_seconds: u32,
-    /// Délai sans mesure valide avant l'état « dégradé », en secondes.
+    /// Delay with no valid measurement before the "degraded" state, in seconds.
     pub fallback_seconds: u32,
-    /// Réglages fins.
+    /// Fine settings.
     pub tuning: Tuning,
 }
 
-/// Configuration complète.
+/// Complete configuration.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Config {
-    /// Version du schéma.
+    /// Schema version.
     pub version: u32,
-    /// Réglages généraux.
+    /// General settings.
     pub general: General,
-    /// Presets (≤ 10), dans l'ordre du fichier.
+    /// Presets (≤ 10), in file order.
     #[serde(serialize_with = "ser_presets")]
     pub presets: Vec<Preset>,
-    /// Écrans mémorisés (≤ 32, même débranchés).
+    /// Remembered displays (≤ 32, even unplugged).
     #[serde(serialize_with = "ser_displays")]
     pub displays: Vec<DisplayEntry>,
-    /// Planning.
+    /// Schedule.
     pub schedule: ScheduleConfig,
-    /// Atténuation à l'inactivité.
+    /// Idle dimming.
     pub idle: IdleConfig,
-    /// Auto-luminosité.
+    /// Auto-brightness.
     pub auto: AutoConfig,
 }
 
@@ -356,8 +356,8 @@ impl Default for Config {
     }
 }
 
-/// Vrai pour un identifiant d'entité Home Assistant `domaine.objet`
-/// (minuscules, chiffres, `_`), de 127 caractères au plus. Écarte `/`, `..`, `?`.
+/// True for a Home Assistant entity identifier `domain.object`
+/// (lowercase, digits, `_`), at most 127 characters. Rejects `/`, `..`, `?`.
 pub fn is_valid_entity_id(id: &str) -> bool {
     let ok = |s: &str| {
         !s.is_empty()
@@ -471,7 +471,7 @@ impl Reader {
         }
     }
 
-    /// Sous-table `key` de `parent`, ou table vide (avec remarque si le type est faux).
+    /// `key` sub-table of `parent`, or empty table (with a remark if the type is wrong).
     fn table<'a>(
         &mut self,
         path: &str,
@@ -895,7 +895,7 @@ fn syntax_error(text: &str, e: &toml::de::Error) -> ConfigError {
 }
 
 impl Config {
-    /// Lit et valide un document TOML. Voir la documentation du module.
+    /// Reads and validates a TOML document. See the module documentation.
     pub fn parse(text: &str) -> Result<Loaded, ConfigError> {
         let root: Table = text.parse().map_err(|e| syntax_error(text, &e))?;
         let mut r = Reader { issues: Vec::new() };
@@ -1011,17 +1011,17 @@ impl Config {
         })
     }
 
-    /// Sérialise en TOML (écriture atomique à la charge du démon).
+    /// Serializes to TOML (atomic write is the daemon's responsibility).
     pub fn to_toml(&self) -> Result<String, ConfigError> {
         toml::to_string_pretty(self).map_err(|e| ConfigError::Serialize(e.to_string()))
     }
 
-    /// Construit le planning validé à partir des points de la configuration.
+    /// Builds the validated schedule from the configuration points.
     pub fn build_schedule(&self) -> Result<Schedule, ScheduleError> {
         Schedule::new(self.schedule.points.clone())
     }
 
-    /// Cherche un preset par nom, sans tenir compte de la casse.
+    /// Looks up a preset by name, ignoring case.
     pub fn preset(&self, name: &str) -> Option<&Preset> {
         self.presets
             .iter()

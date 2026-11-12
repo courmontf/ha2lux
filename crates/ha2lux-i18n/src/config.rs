@@ -1,16 +1,16 @@
-//! Langue choisie dans `config.toml` (`[general] language`).
+//! Language chosen in `config.toml` (`[general] language`).
 //!
-//! La CLI et le tray ne parlent pas toujours au démon (aide, `doctor`, erreurs
-//! d'usage) : ils lisent donc eux-mêmes ce fichier, au démarrage. Toute difficulté
-//! (fichier absent, illisible, valeur invalide) est ignorée : on retombe alors sur
-//! la langue de la session, sans jamais empêcher d'afficher une aide.
+//! The CLI and the tray do not always talk to the daemon (help, `doctor`, usage errors),
+//! so they read this file themselves at startup. Any problem
+//! (missing or unreadable file, invalid value) is ignored: we then fall back to
+//! the session language, never preventing help from being displayed.
 
 use std::path::{Path, PathBuf};
 
 use ha2lux_core::config::{Config, LANGUAGE_AUTO};
 
-/// Chemin de `config.toml` (même règle XDG que le démon : une variable XDG n'est
-/// valable que si elle est un chemin absolu).
+/// Path of `config.toml` (same XDG rule as the daemon: an XDG variable is
+/// only valid if it is an absolute path).
 pub fn config_file(get: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
     let absolute = |p: &PathBuf| p.is_absolute();
     get("XDG_CONFIG_HOME")
@@ -26,29 +26,29 @@ pub fn config_file(get: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
         .map(|base| base.join("ha2lux").join("config.toml"))
 }
 
-/// Langue demandée par le texte d'une configuration, `None` pour `auto`,
-/// l'absence de clé ou une configuration illisible.
+/// Language requested by a configuration text, `None` for `auto`,
+/// a missing key or an unreadable configuration.
 pub fn language_in(text: &str) -> Option<String> {
     let language = Config::parse(text).ok()?.config.general.language;
     (language != LANGUAGE_AUTO).then_some(language)
 }
 
-/// Lit `config.toml` et fixe la langue demandée (voir [`crate::set_preferred`]).
-/// À appeler au début de `main`, avant d'afficher quoi que ce soit.
+/// Reads `config.toml` and sets the requested language (see [`crate::set_preferred`]).
+/// To be called at the start of `main`, before displaying anything.
 pub fn init_from_config() {
     if let Some(path) = config_file(|name| std::env::var(name).ok()) {
         apply_file(&path);
     }
 }
 
-/// Relit `path` et applique sa langue. Un fichier absent, illisible ou mal formé ne change rien ;
-/// `auto` ou l'absence de clé redonnent la langue de la session. Renvoie `true` si la
-/// langue effective a changé.
+/// Rereads `path` and applies its language. A missing, unreadable or malformed file changes nothing;
+/// `auto` or a missing key restore the session language. Returns `true` if the
+/// effective language changed.
 pub fn apply_file(path: &Path) -> bool {
     let Ok(text) = std::fs::read_to_string(path) else {
         return false;
     };
-    // Fichier mal formé : on garde la langue actuelle plutôt que de la perdre.
+    // Malformed file: keep the current language rather than losing it.
     let Ok(parsed) = Config::parse(&text) else {
         return false;
     };
@@ -80,7 +80,7 @@ mod tests {
             config_file(env(&home)),
             Some(PathBuf::from("/home/u/.config/ha2lux/config.toml"))
         );
-        // Une variable XDG relative est ignorée.
+        // A relative XDG variable is ignored.
         let relative = [("XDG_CONFIG_HOME", "cfg"), ("HOME", "/home/u")];
         assert_eq!(
             config_file(env(&relative)),
@@ -98,9 +98,9 @@ mod tests {
         );
         assert_eq!(language_in("[general]\nlanguage = \"auto\""), None);
         assert_eq!(language_in(""), None);
-        // Valeur invalide : la configuration la ramène à `auto`.
+        // Invalid value: the configuration maps it to `auto`.
         assert_eq!(language_in("[general]\nlanguage = \"???\""), None);
-        // Fichier illisible : aucune langue, jamais d'erreur.
+        // Unreadable file: no language, never an error.
         assert_eq!(language_in("[general\nlanguage = "), None);
     }
 }

@@ -1,48 +1,48 @@
-//! Découverte des écrans via DRM/sysfs : connecteurs, EDID, bus DDC.
+//! Display discovery through DRM/sysfs: connectors, EDID, DDC buses.
 //!
-//! Lecture seule. **Seuls** les bus reliés à un connecteur externe connecté
-//! sont retenus : on n'écrit jamais sur un bus I²C non lié à un écran
-//! (SMBus, capteurs…), ce qui peut être dangereux sur certains contrôleurs.
+//! Read-only. **Only** buses linked to a connected external connector
+//! are kept: we never write to an I²C bus not tied to a display
+//! (SMBus, sensors...), which can be dangerous on some controllers.
 //!
-//! Les fonctions sont bloquantes (quelques lectures sysfs) : les appeler depuis
-//! `spawn_blocking`, jamais depuis un chemin d'interface.
+//! The functions are blocking (a few sysfs reads): call them from
+//! `spawn_blocking`, never from an interface path.
 
 use std::path::{Path, PathBuf};
 
 use ha2lux_core::{DisplayId, DisplayInfo, DisplayKind, Edid};
 
-/// Répertoire sysfs standard des connecteurs DRM.
+/// Standard sysfs directory of DRM connectors.
 pub const DEFAULT_DRM_DIR: &str = "/sys/class/drm";
 
 /// Un connecteur DRM.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Connector {
-    /// Carte (ex. `card1`).
+    /// Card (e.g. `card1`).
     pub card: String,
-    /// Nom du connecteur (ex. `DP-1`, `eDP-1`, `HDMI-A-2`).
+    /// Connector name (e.g. `DP-1`, `eDP-1`, `HDMI-A-2`).
     pub name: String,
-    /// Écran branché (`status` = `connected`).
+    /// Display plugged in (`status` = `connected`).
     pub connected: bool,
-    /// Panneau interne (`eDP`, `LVDS`, `DSI`) : backlight, jamais de DDC.
+    /// Internal panel (`eDP`, `LVDS`, `DSI`): backlight, never DDC.
     pub internal: bool,
-    /// Bus I²C de ce connecteur (`N` de `i2c-N`), s'il est exposé.
+    /// I²C bus of this connector (`N` of `i2c-N`), if exposed.
     pub ddc_bus: Option<u32>,
-    /// EDID analysé.
+    /// Parsed EDID.
     pub edid: Option<Edid>,
-    /// Pourquoi l'EDID est absent ou illisible.
+    /// Why the EDID is missing or unreadable.
     pub edid_problem: Option<String>,
-    /// Répertoire sysfs du connecteur.
+    /// Sysfs directory of the connector.
     pub path: PathBuf,
 }
 
-/// Un écran externe que l'on peut tenter de piloter en DDC/CI.
+/// An external display that we can try to drive over DDC/CI.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DdcCandidate {
-    /// Identité (maximum inconnu, fixé par la sonde).
+    /// Identity (maximum unknown, set by the probe).
     pub info: DisplayInfo,
     /// Connecteur.
     pub connector: String,
-    /// Bus I²C du connecteur.
+    /// I²C bus of the connector.
     pub bus: u32,
 }
 
@@ -76,7 +76,7 @@ fn ddc_bus_of(connector_dir: &Path) -> Option<u32> {
         })
 }
 
-/// Énumère les connecteurs de `drm_dir`, triés par (carte, nom).
+/// Enumerates the connectors of `drm_dir`, sorted by (card, name).
 pub fn scan(drm_dir: &Path) -> Vec<Connector> {
     let Ok(entries) = std::fs::read_dir(drm_dir) else {
         return Vec::new();
@@ -113,9 +113,9 @@ pub fn scan(drm_dir: &Path) -> Vec<Connector> {
     connectors
 }
 
-/// Écrans externes pilotables en DDC/CI : connectés, non internes, avec un bus
-/// DDC exposé et un EDID lisible. L'identité suit l'EDID (pas le connecteur) ;
-/// deux écrans à l'identité identique sont départagés par leur connecteur.
+/// External displays controllable over DDC/CI: connected, not internal, with an exposed
+/// DDC bus and a readable EDID. Identity follows the EDID (not the connector);
+/// two displays with the same identity are told apart by their connector.
 pub fn external_candidates(connectors: &[Connector]) -> Vec<DdcCandidate> {
     let mut candidates: Vec<DdcCandidate> = connectors
         .iter()

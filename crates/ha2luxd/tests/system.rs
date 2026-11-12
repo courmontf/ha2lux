@@ -1,4 +1,4 @@
-//! Événements système et gestionnaire de rescan dans le démon (T-DDC-03..09), temps virtuel.
+//! System events and rescan handler in the daemon (T-DDC-03..09), virtual time.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -52,7 +52,7 @@ async fn no_hardware_write_while_the_machine_is_suspending_and_restore_on_resume
         40,
         "DDC en veille = blocage : aucune écriture pendant la préparation de veille"
     );
-    a.set_raw(100); // l'écran se remet à 100 % au réveil
+    a.set_raw(100); // the display resets to 100 % on wake
     rig.handle.send_system(SystemEvent::Resume).await.unwrap();
     rig.advance(Duration::from_millis(1_700)).await;
     assert_eq!(
@@ -64,8 +64,8 @@ async fn no_hardware_write_while_the_machine_is_suspending_and_restore_on_resume
 
 #[tokio::test(start_paused = true)]
 async fn a_screen_that_resets_late_after_wake_is_corrected_by_the_next_scan() {
-    // Constaté sur du vrai matériel : des moniteurs DisplayPort retrouvent leur luminosité
-    // d'usine plusieurs secondes après la réapplication du réveil.
+    // Observed on real hardware: DisplayPort monitors regain their factory
+    // brightness several seconds after the wake re-application.
     let (rig, _, a, _) = two_screens().await;
     rig.ok(Request::SetMaster(40)).await;
     rig.handle.send_system(SystemEvent::Suspend).await.unwrap();
@@ -74,7 +74,7 @@ async fn a_screen_that_resets_late_after_wake_is_corrected_by_the_next_scan() {
     rig.advance(Duration::from_millis(1_700)).await;
     assert_eq!(a.raw(), 40);
     rig.advance(Duration::from_secs(4)).await;
-    a.set_raw(100); // réinitialisation tardive, sans aucun événement de branchement
+    a.set_raw(100); // late reset, with no hotplug event
     rig.advance(Duration::from_secs(12)).await;
     assert_eq!(
         a.raw(),
@@ -82,7 +82,7 @@ async fn a_screen_that_resets_late_after_wake_is_corrected_by_the_next_scan() {
         "la dérive est corrigée par la vérification périodique, sans événement"
     );
 
-    // Hors de la fenêtre, un réglage fait sur le moniteur est respecté.
+    // Outside the window, a change made on the monitor is respected.
     rig.advance(Duration::from_secs(90)).await;
     a.set_raw(55);
     rig.handle.send_system(SystemEvent::Hotplug).await.unwrap();
@@ -181,7 +181,7 @@ async fn t_ddc_06_noisy_hotplug_is_floored_to_30_seconds() {
         rig.advance(Duration::from_secs(5)).await;
         counts.push(hardware.discoveries() - start);
     }
-    // 65 s de hotplug toutes les 5 s : au plus un scan par fenêtre de 30 s (+ le premier).
+    // 65 s of hotplug every 5 s: at most one scan per 30 s window (+ the first).
     assert!(
         *counts.last().unwrap() <= 3,
         "plancher de 30 s : {counts:?}"
@@ -214,7 +214,7 @@ async fn t_ddc_03_unavailable_display_is_retried_on_the_waiting_ladder_until_it_
         rig.advance(Duration::from_secs(1)).await;
         seen.push(hardware.discoveries() - base);
     }
-    // Relances à +2 s, +5 s, +10 s, +20 s, puis toutes les 60 s : 4 scans en 37 s, un de plus à ~97 s.
+    // Retries at +2 s, +5 s, +10 s, +20 s, then every 60 s: 4 scans in 37 s, one more at ~97 s.
     let at = |s: usize| seen[s - 1];
     assert_eq!(at(1), 0);
     assert_eq!(at(3), 1, "{seen:?}");
@@ -272,7 +272,7 @@ async fn t_ddc_09_retries_wait_while_the_interface_is_open() {
         base,
         "interface ouverte : aucune relance (une re-création fermerait la fenêtre)"
     );
-    rig.ok(Request::Rescan).await; // la demande de l'utilisateur, elle, n'est pas reportée
+    rig.ok(Request::Rescan).await; // the user's request, however, is not postponed
     assert_eq!(hardware.discoveries(), base + 1);
     rig.ok(Request::SetUiOpen(false)).await;
     rig.advance(Duration::from_secs(70)).await;
@@ -287,7 +287,7 @@ async fn t_ddc_07_a_hung_enumeration_is_disavowed_then_halted_until_a_new_event(
     let (rig, hardware, a, _) = two_screens().await;
     rig.ok(Request::SetMaster(60)).await;
     let before = list(&rig).await;
-    hardware.set_discover_delay(Duration::from_secs(3_600)); // l'énumération ne finit jamais
+    hardware.set_discover_delay(Duration::from_secs(3_600)); // enumeration never finishes
     let base = hardware.discoveries();
     rig.ok(Request::Rescan).await;
     rig.advance(Duration::from_secs(120)).await;

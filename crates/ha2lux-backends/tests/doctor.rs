@@ -1,4 +1,4 @@
-//! `doctor` sur un faux système de fichiers, avec un faux moniteur pour la sonde.
+//! `doctor` on a fake filesystem, with a fake monitor for the probe.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -18,7 +18,7 @@ fn put(root: &Path, relative: &str, content: &str) {
     std::fs::write(path, content).unwrap();
 }
 
-/// Poste sain : module, un nœud accessible, un écran externe sur i2c-7, règle udev, groupe.
+/// Healthy machine: module, an accessible node, an external display on i2c-7, udev rule, group.
 fn healthy_system() -> TempDir {
     let root = TempDir::new().unwrap();
     let r = root.path();
@@ -128,7 +128,7 @@ async fn unreadable_bus_node_for_a_connected_display_fails() {
         .open(&node)
         .is_ok()
     {
-        return; // exécuté en root : les permissions n'ont pas d'effet
+        return; // run as root: permissions have no effect
     }
     let report = run(&options(root.path(), false)).await;
     assert_eq!(status_of(&report, "acces-i2c"), Status::Fail);
@@ -300,7 +300,7 @@ async fn text_output_lists_checks_hints_and_connectors() {
     assert!(text.contains("DEL-A0B1-12345678"), "{text}");
 }
 
-/// Diagnostic du système réel, en lecture seule (sans `--probe`). Ignoré par défaut.
+/// Diagnostics of the real system, read-only (without `--probe`). Ignored by default.
 #[tokio::test]
 #[ignore = "lit le système réel ; à lancer à la main avec --ignored"]
 async fn real_system_smoke_without_probe() {
@@ -310,7 +310,7 @@ async fn real_system_smoke_without_probe() {
     println!("{}", report.render_text());
 }
 
-/// Poste NVIDIA : l'écran n'a pas de lien ddc ; son bus est trouvé par EDID sous --probe.
+/// NVIDIA machine: the display has no ddc link; its bus is found by EDID under --probe.
 fn nvidia_root() -> (TempDir, Vec<u8>) {
     let root = healthy_system();
     std::fs::remove_file(root.path().join("sys/class/drm/card0-DP-1/ddc")).unwrap();

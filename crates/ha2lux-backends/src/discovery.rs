@@ -1,19 +1,19 @@
-//! Association écran ↔ bus DDC quand sysfs ne la donne pas (NVIDIA propriétaire).
+//! Display to DDC bus association when sysfs does not provide it (proprietary NVIDIA).
 //!
-//! Avec le pilote NVIDIA propriétaire, les connecteurs DRM n'ont pas de lien
-//! `ddc`. Les bus DDC existent pourtant : ce sont des adaptateurs I²C nommés
-//! « NVIDIA i2c adapter N … ». On les associe aux connecteurs en **comparant
-//! l'EDID lu sur le bus** (adresse 0x50) à celui du connecteur.
+//! With the proprietary NVIDIA driver, DRM connectors have no `ddc`
+//! link. The DDC buses do exist, though: they are I²C adapters named
+//! "NVIDIA i2c adapter N ...". They are matched to connectors by **comparing
+//! the EDID read on the bus** (address 0x50) with the connector's.
 //!
 //! Garde-fous :
-//! - seuls les adaptateurs dont le **nom** est celui d'un pilote GPU connu sont
-//!   ouverts (jamais un bus SMBus ou de capteurs) ;
-//! - la lecture d'EDID est une **vraie transaction I²C** : elle n'a lieu que si
-//!   l'appelant la demande explicitement (`ha2lux doctor --probe`, puis le
-//!   rescan du démon) ;
-//! - une association ambiguë (deux écrans à l'EDID identique) est refusée.
+//! - only adapters whose **name** is that of a known GPU driver are
+//!   opened (never an SMBus or sensor bus);
+//! - reading the EDID is a **real I²C transaction**: it only happens if
+//!   the caller asks for it explicitly (`ha2lux doctor --probe`, then the
+//!   daemon's rescan);
+//! - an ambiguous association (two displays with identical EDID) is refused.
 //!
-//! Les fonctions sont bloquantes : à appeler depuis `spawn_blocking`.
+//! The functions are blocking: call them from `spawn_blocking`.
 
 use std::path::Path;
 
@@ -22,29 +22,29 @@ use ha2lux_core::Edid;
 use crate::drm::{self, Connector, DdcCandidate};
 use crate::i2c::{I2cOpener, read_edid};
 
-/// Répertoire sysfs des nœuds I²C.
+/// Sysfs directory of the I²C nodes.
 pub const DEFAULT_I2C_DEV_DIR: &str = "/sys/class/i2c-dev";
 
-/// Fragments de noms d'adaptateurs I²C qui sont des bus DDC de carte graphique.
+/// Fragments of I²C adapter names that are graphics card DDC buses.
 const GPU_DDC_ADAPTER_NAMES: [&str; 1] = ["NVIDIA i2c adapter"];
 
 /// Un adaptateur I²C.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct I2cAdapter {
-    /// Numéro `N` de `i2c-N`.
+    /// Number `N` of `i2c-N`.
     pub bus: u32,
-    /// Nom déclaré par le noyau.
+    /// Name declared by the kernel.
     pub name: String,
 }
 
 impl I2cAdapter {
-    /// Bus DDC d'une carte graphique (le seul type que l'on ose sonder).
+    /// DDC bus of a graphics card (the only type we dare to probe).
     pub fn is_gpu_ddc(&self) -> bool {
         GPU_DDC_ADAPTER_NAMES.iter().any(|p| self.name.contains(p))
     }
 }
 
-/// Liste les adaptateurs de `dir` (lecture seule), triés par numéro.
+/// Lists the adapters in `dir` (read-only), sorted by number.
 pub fn list_adapters(dir: &Path) -> Vec<I2cAdapter> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -64,26 +64,26 @@ pub fn list_adapters(dir: &Path) -> Vec<I2cAdapter> {
     adapters
 }
 
-/// D'où vient l'association écran ↔ bus.
+/// Where the display to bus association comes from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BusSource {
     /// Lien `ddc` de sysfs.
     Drm,
-    /// EDID lu sur le bus et comparé à celui du connecteur.
+    /// EDID read on the bus and compared with the connector's.
     EdidOverI2c,
 }
 
-/// Résultat d'une découverte.
+/// Result of a discovery.
 #[derive(Clone, Debug, Default)]
 pub struct Discovery {
-    /// Écrans pilotables, avec l'origine de leur bus.
+    /// Controllable displays, with the origin of their bus.
     pub candidates: Vec<(DdcCandidate, BusSource)>,
-    /// Remarques lisibles (ambiguïtés, bus illisibles).
+    /// Human-readable remarks (ambiguities, unreadable buses).
     pub notes: Vec<String>,
 }
 
-/// Découvre les écrans externes pilotables. Sans `resolve_by_edid`, seul le lien
-/// `ddc` de sysfs est utilisé et **aucune transaction I²C** n'a lieu.
+/// Discovers the controllable external displays. Without `resolve_by_edid`, only the sysfs `ddc`
+/// link is used and **no I²C transaction** takes place.
 pub fn discover_external(root: &Path, opener: &dyn I2cOpener, resolve_by_edid: bool) -> Discovery {
     let mut connectors = drm::scan(&root.join("sys/class/drm"));
     let mut sources: Vec<(String, BusSource)> = connectors
@@ -105,7 +105,7 @@ pub fn discover_external(root: &Path, opener: &dyn I2cOpener, resolve_by_edid: b
                 .into_iter()
                 .filter(I2cAdapter::is_gpu_ddc)
                 .collect();
-            // Une lecture d'EDID par adaptateur GPU ; un port vide échoue, c'est normal.
+            // One EDID read per GPU adapter; an empty port fails, which is normal.
             let mut on_bus: Vec<(u32, u64)> = Vec::new();
             for adapter in &adapters {
                 match read_edid(opener, adapter.bus).map(|raw| Edid::parse(&raw)) {
@@ -113,7 +113,7 @@ pub fn discover_external(root: &Path, opener: &dyn I2cOpener, resolve_by_edid: b
                     Ok(Err(error)) => {
                         notes.push(format!("i2c-{}: invalid EDID ({error})", adapter.bus))
                     }
-                    Err(_) => {} // aucun écran sur ce port
+                    Err(_) => {} // no display on this port
                 }
             }
             for &i in &unresolved {
@@ -165,7 +165,7 @@ pub fn discover_external(root: &Path, opener: &dyn I2cOpener, resolve_by_edid: b
     Discovery { candidates, notes }
 }
 
-/// Raccourci : connecteurs externes encore sans bus DDC après le seul usage de sysfs.
+/// Shortcut: external connectors still without a DDC bus after using sysfs alone.
 pub fn without_bus(connectors: &[Connector]) -> Vec<&Connector> {
     connectors
         .iter()

@@ -1,9 +1,9 @@
-//! Client minimal du Secret Service (`org.freedesktop.secrets`) : trousseau de KDE
-//! (KWallet), GNOME Keyring, KeePassXC…
+//! Minimal Secret Service client (`org.freedesktop.secrets`): KDE keyring
+//! (KWallet), GNOME Keyring, KeePassXC...
 //!
-//! Algorithme de session « plain » : le secret transite en clair **sur le bus de session**
-//! (socket Unix de l'utilisateur), comme pour la plupart des clients simples. Les éléments
-//! sont repérés par les attributs `application=ha2lux`, `kind=ha-token`, `host=<hôte:port>`.
+//! "plain" session algorithm: the secret travels in clear **over the session bus**
+//! (the user's Unix socket), as with most simple clients. Items
+//! are identified by the attributes `application=ha2lux`, `kind=ha-token`, `host=<host:port>`.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -86,7 +86,7 @@ mod proxies {
 
 use proxies::{SecretCollectionProxy, SecretItemProxy, SecretPromptProxy, SecretServiceProxy};
 
-/// Trousseau du bureau.
+/// Desktop keyring.
 pub struct ServiceSecretStore {
     connection: zbus::Connection,
 }
@@ -119,7 +119,7 @@ fn attributes(host_key: &str) -> HashMap<&str, &str> {
 }
 
 impl ServiceSecretStore {
-    /// Se connecte au bus de session de l'utilisateur.
+    /// Connects to the user's session bus.
     pub async fn connect_session() -> Result<Self, SecretError> {
         let connection = zbus::Connection::session()
             .await
@@ -127,14 +127,14 @@ impl ServiceSecretStore {
         Self::with_connection(connection).await
     }
 
-    /// Utilise une connexion existante ; échoue si le service n'est pas sur le bus.
+    /// Uses an existing connection; fails if the service is not on the bus.
     pub async fn with_connection(connection: zbus::Connection) -> Result<Self, SecretError> {
         let dbus = zbus::fdo::DBusProxy::new(&connection)
             .await
             .map_err(|e| unavailable(&e))?;
         let name = zbus::names::BusName::try_from(SERVICE)
             .map_err(|e| SecretError::Unavailable(e.to_string()))?;
-        // Le service peut ne démarrer que sur demande (activation D-Bus) : on tente de l'activer.
+        // The service may only start on demand (D-Bus activation): we try to activate it.
         let present = dbus.name_has_owner(name.clone()).await.unwrap_or(false)
             || dbus
                 .start_service_by_name(
@@ -168,7 +168,7 @@ impl ServiceSecretStore {
         Ok(session)
     }
 
-    /// Attend la fin d'une invite (déverrouillage). `Ok(true)` si acceptée.
+    /// Waits for a prompt (unlock) to finish. `Ok(true)` if accepted.
     async fn run_prompt(&self, path: &OwnedObjectPath) -> Result<bool, SecretError> {
         if is_none_path(path) {
             return Ok(true);

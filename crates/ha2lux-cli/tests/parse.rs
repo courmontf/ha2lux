@@ -1,4 +1,4 @@
-//! T-CLI-01..09 : analyse des arguments.
+//! T-CLI-01..09: argument parsing.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ha2lux_cli::cli::{
@@ -158,7 +158,7 @@ fn t_cli_06_display_option_validation() {
             }
         })
     );
-    // L'option peut précéder la valeur.
+    // The option may precede the value.
     assert_eq!(
         run(&["set", "--display", "2", "5"]).command,
         run(&["set", "5", "--display", "2"]).command
@@ -202,7 +202,7 @@ fn t_cli_08_preset() {
     );
     usage(&["preset"]);
     usage(&["preset", "-x"]);
-    // Le nom est transmis tel quel : la casse n'est comparée que par le démon.
+    // The name is passed as is: case is only compared by the daemon.
     assert_eq!(
         run(&["preset", "NiGhT"]).command,
         Command::Preset {

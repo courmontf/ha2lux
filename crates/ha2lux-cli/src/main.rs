@@ -1,4 +1,4 @@
-//! Binaire `ha2lux`.
+//! `ha2lux` binary.
 #![forbid(unsafe_code)]
 
 use std::process::ExitCode;
@@ -8,11 +8,11 @@ use ha2lux_cli::cli::{Command, Parsed, parse};
 use ha2lux_cli::client::{CallError, ZbusDaemon};
 use ha2lux_cli::run::{Outcome, execute};
 
-/// Délai maximal d'un appel au démon.
+/// Maximum delay of a call to the daemon.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 fn emit(outcome: &Outcome) -> ExitCode {
-    // Un tube fermé (ex. `| head`) ne doit pas faire échouer la commande.
+    // A closed pipe (e.g. `| head`) must not make the command fail.
     use std::io::Write;
     let _ = std::io::stdout().write_all(outcome.stdout.as_bytes());
     let _ = std::io::stderr().write_all(outcome.stderr.as_bytes());
@@ -21,8 +21,8 @@ fn emit(outcome: &Outcome) -> ExitCode {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
-    // Langue du fichier de configuration, avant d'afficher quoi que ce soit (l'aide
-    // et `doctor` fonctionnent sans le démon).
+    // Language from the configuration file, before displaying anything (help
+    // and `doctor` work without the daemon).
     ha2lux_i18n::config::init_from_config();
     let cli = match parse(std::env::args().skip(1)) {
         Ok(Parsed::Output(text)) => {
@@ -35,9 +35,9 @@ async fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    // `doctor` est autonome : il fonctionne sans démon.
+    // `doctor` is standalone: it works without a daemon.
     if matches!(cli.command, Command::Doctor { .. }) {
-        // Le client n'est pas utilisé ; on évite de se connecter au bus.
+        // The client is not used; we avoid connecting to the bus.
         let outcome = execute(&cli, &NoDaemon, TIMEOUT).await;
         return emit(&outcome);
     }
@@ -54,7 +54,7 @@ async fn main() -> ExitCode {
     emit(&execute(&cli, &daemon, TIMEOUT).await)
 }
 
-/// Démon factice pour `doctor` (jamais appelé).
+/// Dummy daemon for `doctor` (never called).
 struct NoDaemon;
 
 impl ha2lux_cli::client::Daemon for NoDaemon {

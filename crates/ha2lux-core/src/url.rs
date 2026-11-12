@@ -1,35 +1,35 @@
-//! URL de Home Assistant : normalisation, validation, classification LAN (spec §8.2).
+//! Home Assistant URL: normalization, validation, LAN classification (spec §8.2).
 
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 use thiserror::Error;
 
-/// Longueur maximale d'une URL normalisée.
+/// Maximum length of a normalized URL.
 pub const MAX_URL_LEN: usize = 255;
 
 const LOCAL_SUFFIXES: [&str; 4] = [".local", ".lan", ".internal", ".home.arpa"];
 
-/// Erreurs de validation d'URL.
+/// URL validation errors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum UrlError {
-    /// Entrée vide.
+    /// Empty input.
     #[error("l'adresse est vide")]
     Empty,
-    /// Dépasse [`MAX_URL_LEN`].
+    /// Exceeds [`MAX_URL_LEN`].
     #[error("the address exceeds {MAX_URL_LEN} characters")]
     TooLong,
-    /// Schéma autre que http/https.
+    /// Scheme other than http/https.
     #[error("only the http and https schemes are accepted")]
     UnsupportedScheme,
-    /// Identifiants (`utilisateur:mot-de-passe@`) interdits dans l'URL.
+    /// Credentials (`user:password@`) forbidden in the URL.
     #[error("the address must not contain credentials (the token is entered separately)")]
     UserInfo,
-    /// Hôte ambigu ou mal formé (zéros initiaux, entier nu, antislash, etc.).
+    /// Ambiguous or malformed host (leading zeros, bare integer, backslash, etc.).
     #[error("invalid or ambiguous host")]
     InvalidHost,
 }
 
-/// Longueur du schéma si `s` commence par `schéma://`.
+/// Length of the scheme if `s` starts with `scheme://`.
 fn scheme_len(s: &str) -> Option<usize> {
     let end = s.find("://")?;
     let scheme = &s[..end];
@@ -39,8 +39,8 @@ fn scheme_len(s: &str) -> Option<usize> {
     valid.then_some(end)
 }
 
-/// Retire les espaces, ajoute `http://` si aucun schéma, borne la taille.
-/// La casse du schéma est conservée.
+/// Trims whitespace, adds `http://` if there is no scheme, bounds the size.
+/// The scheme's case is preserved.
 pub fn normalize_url(input: &str) -> Result<String, UrlError> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -57,7 +57,7 @@ pub fn normalize_url(input: &str) -> Result<String, UrlError> {
     Ok(url)
 }
 
-/// Vrai si l'URL utilise le schéma `http` (insensible à la casse).
+/// True if the URL uses the `http` scheme (case-insensitive).
 pub fn is_http(url: &str) -> bool {
     url.get(..7)
         .is_some_and(|p| p.eq_ignore_ascii_case("http://"))
@@ -102,7 +102,7 @@ fn parse_port(port: &str) -> bool {
     !port.is_empty() && port.len() <= 5 && port.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// Analyse `hôte[:port]` (sans informations d'utilisateur).
+/// Parses `host[:port]` (without user info).
 fn parse_host(hostport: &str) -> Option<Host> {
     if let Some(rest) = hostport.strip_prefix('[') {
         let (inside, after) = rest.split_once(']')?;
@@ -147,7 +147,7 @@ fn parse_host(hostport: &str) -> Option<Host> {
     Some(Host::Name(name.to_owned()))
 }
 
-/// Dernier label numérique ou hexadécimal (`0x…`) : forme ambiguë (entier nu).
+/// Last numeric or hexadecimal (`0x…`) label: ambiguous form (bare integer).
 fn ambiguous_name(name: &str) -> bool {
     let last = name.rsplit('.').next().unwrap_or(name);
     last.bytes().all(|b| b.is_ascii_digit())
@@ -170,8 +170,8 @@ fn is_local_host(host: &Host) -> bool {
     }
 }
 
-/// Sépare schéma, informations d'utilisateur, `hôte[:port]`.
-/// `None` si l'autorité est manifestement invalide (espace, antislash).
+/// Splits scheme, user info, `host[:port]`.
+/// `None` if the authority is clearly invalid (space, backslash).
 fn split_authority(url: &str) -> Option<(Option<&str>, &str)> {
     let rest = scheme_len(url).map_or(url, |n| &url[n + 3..]);
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
@@ -185,40 +185,40 @@ fn split_authority(url: &str) -> Option<(Option<&str>, &str)> {
     })
 }
 
-/// Vrai si l'adresse désigne un hôte « réseau local » : IPv4 privées
-/// (10/8, 172.16/12, 192.168/16), lien-local 169.254/16, boucle locale ;
-/// IPv6 ULA, lien-local, `::1` ; noms `.local`, `.lan`, `.internal`,
-/// `.home.arpa` ou sans point. Toute forme ambiguë ou mal formée donne `false`.
+/// True if the address designates a "local network" host: private IPv4
+/// (10/8, 172.16/12, 192.168/16), link-local 169.254/16, loopback;
+/// IPv6 ULA, link-local, `::1`; names `.local`, `.lan`, `.internal`,
+/// `.home.arpa` or without a dot. Any ambiguous or malformed form gives `false`.
 pub fn is_local_url(url: &str) -> bool {
     split_authority(url)
         .and_then(|(_, hostport)| parse_host(hostport))
         .is_some_and(|h| is_local_host(&h))
 }
 
-/// Note à afficher à l'utilisateur lors de la configuration.
+/// Note to show the user during configuration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UrlNote {
-    /// Rien à signaler (https).
+    /// Nothing to report (https).
     None,
-    /// Information : http sur réseau local.
+    /// Information: http on a local network.
     HttpOnLan,
-    /// Avertissement : http hors réseau local (confirmation explicite requise).
+    /// Warning: http outside the local network (explicit confirmation required).
     HttpPublic,
 }
 
-/// URL validée et normalisée.
+/// Validated and normalized URL.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckedUrl {
-    /// URL normalisée, sans informations d'utilisateur.
+    /// Normalized URL, without user info.
     pub url: String,
-    /// Hôte sur réseau local.
+    /// Host on the local network.
     pub local: bool,
-    /// Note de sécurité associée.
+    /// Associated security note.
     pub note: UrlNote,
 }
 
-/// Normalise puis valide une URL saisie par l'utilisateur : http/https
-/// seulement, pas d'identifiants, hôte non ambigu.
+/// Normalizes then validates a URL entered by the user: http/https
+/// only, no credentials, unambiguous host.
 pub fn check_url(input: &str) -> Result<CheckedUrl, UrlError> {
     let url = normalize_url(input)?;
     let scheme = scheme_len(&url).map(|n| url[..n].to_ascii_lowercase());
@@ -244,12 +244,12 @@ pub fn check_url(input: &str) -> Result<CheckedUrl, UrlError> {
     Ok(CheckedUrl { url, local, note })
 }
 
-/// Clé de stockage du jeton : `hôte:port` en minuscules, sans identifiants, chemin ni
-/// paramètres (le port par défaut du schéma est rendu explicite). Deux adresses qui
-/// désignent le même serveur ont la même clé ; **changer d'hôte ou de port change la clé**,
-/// donc le jeton enregistré pour l'ancien serveur n'est jamais présenté au nouveau.
+/// Token storage key: `host:port` in lowercase, without credentials, path or
+/// parameters (the scheme's default port is made explicit). Two addresses that
+/// designate the same server have the same key; **changing host or port changes the key**,
+/// so the token saved for the old server is never presented to the new one.
 ///
-/// Renvoie `None` si l'adresse est refusée par [`check_url`].
+/// Returns `None` if the address is rejected by [`check_url`].
 pub fn authority_key(input: &str) -> Option<String> {
     let checked = check_url(input).ok()?;
     let https = checked

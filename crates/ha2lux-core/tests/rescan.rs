@@ -1,4 +1,4 @@
-//! Gestionnaire de rescan : T-DDC-03..07 et 09, en temps explicite (aucun sleep).
+//! Rescan manager: T-DDC-03..07 and 09, in explicit time (no sleep).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{RescanAction, RescanConfig, RescanManager, RescanTrigger, ScanOutcome};
 use proptest::prelude::*;
@@ -16,8 +16,8 @@ const WAITING: ScanOutcome = ScanOutcome {
     waiting: true,
 };
 
-/// Fait avancer le temps par pas de `step` ms jusqu'à `until`, en terminant chaque scan
-/// immédiatement ; renvoie les instants de départ des scans.
+/// Advances time in steps of `step` ms up to `until`, finishing each scan
+/// immediately; returns the start instants of the scans.
 fn run_until(m: &mut RescanManager, from: u64, until: u64, step: u64) -> Vec<u64> {
     let mut starts = Vec::new();
     let mut now = from;
@@ -45,7 +45,7 @@ fn startup_and_manual_are_immediate() {
 fn t_ddc_05_a_burst_of_events_gives_a_single_scan() {
     let mut m = manager();
     let mut starts = 0;
-    // 20 événements en 300 ms (un tous les 15 ms), le gestionnaire est interrogé à chacun.
+    // 20 events in 300 ms (one every 15 ms), the manager is polled at each one.
     for i in 0..20u64 {
         let now = i * 15;
         m.trigger(now, RescanTrigger::Hotplug, 0);
@@ -65,7 +65,7 @@ fn t_ddc_05_a_burst_of_events_gives_a_single_scan() {
 #[test]
 fn the_debounce_is_trailing_and_capped() {
     let mut m = manager();
-    // Des événements toutes les 200 ms pendant 10 s ne doivent pas repousser le scan indéfiniment.
+    // Events every 200 ms for 10 s must not postpone the scan indefinitely.
     let mut first_start = None;
     for i in 0..50u64 {
         let now = i * 200;
@@ -93,7 +93,7 @@ fn resume_waits_for_the_initial_delay_then_runs() {
 fn t_ddc_06_noisy_hotplug_is_floored_to_30_seconds_and_the_last_one_is_not_lost() {
     let mut m = manager();
     let mut starts = Vec::new();
-    // Hotplug « bruyant » toutes les 5 s pendant 2 minutes.
+    // "Noisy" hotplug every 5 s for 2 minutes.
     for second in (0..=120u64).step_by(5) {
         m.trigger(second * 1_000, RescanTrigger::Hotplug, 0);
         starts.extend(run_until(
@@ -127,12 +127,12 @@ fn an_isolated_hotplug_is_not_floored_and_wake_is_never_floored() {
         [600],
         "premier hotplug : seulement le débounce"
     );
-    // Deux réveils rapprochés : aucun plancher.
+    // Two wakes close together: no floor.
     m.trigger(3_000, RescanTrigger::Resume, 0);
     assert_eq!(run_until(&mut m, 3_000, 4_000, 100), [3_600]);
     m.trigger(5_000, RescanTrigger::Resume, 0);
     assert_eq!(run_until(&mut m, 5_000, 6_000, 100), [5_600]);
-    // Un hotplug mêlé à un réveil n'est plus « seulement hotplug » : pas de plancher.
+    // A hotplug mixed with a wake is no longer "hotplug only": no floor.
     m.trigger(7_000, RescanTrigger::Hotplug, 0);
     m.trigger(7_100, RescanTrigger::Resume, 0);
     assert_eq!(run_until(&mut m, 7_000, 9_000, 100), [7_700]);
@@ -222,7 +222,7 @@ fn t_ddc_04_displays_that_never_answered_are_not_retried_periodically() {
     m.finished(0, generation, ACCEPTED);
     assert_eq!(m.next_deadline(), None);
     assert!(run_until(&mut m, 0, 600_000, 5_000).is_empty());
-    // Un événement (branchement, déverrouillage, demande manuelle) relance bien.
+    // An event (plug, unlock, manual request) does restart it.
     m.trigger(600_000, RescanTrigger::Resume, 0);
     assert_eq!(run_until(&mut m, 600_000, 602_000, 100).len(), 1);
 }
@@ -287,7 +287,7 @@ fn t_ddc_09_retries_are_deferred_while_the_interface_is_open() {
     );
     m.set_ui_open(false);
     assert_eq!(m.poll(120_000).len(), 1, "relance dès la fermeture");
-    // Une demande de l'utilisateur, elle, n'est pas reportée par l'interface ouverte.
+    // A user request, on the other hand, is not postponed by the open interface.
     m.finished(120_000, 2, ACCEPTED);
     m.set_ui_open(true);
     m.trigger(130_000, RescanTrigger::Manual, 0);
@@ -344,7 +344,7 @@ proptest! {
                 Step::Poll(dt) => {
                     now += u64::from(dt);
                     let actions = m.poll(now);
-                    // Un désaveu éventuel libère le scan courant.
+                    // A possible disownment frees the current scan.
                     if !m.is_running() { running = None; }
                     for RescanAction::Start { generation } in actions {
                         prop_assert!(running.is_none(), "deux scans simultanés");

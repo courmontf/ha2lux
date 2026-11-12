@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Avant chaque push : toute la CI locale (formatage, clippy, tests, cargo-deny si installé).
+# Before each push: the whole local CI (formatting, clippy, tests, cargo-deny if installed).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 echo "[pre-push] scripts/ci.sh" >&2

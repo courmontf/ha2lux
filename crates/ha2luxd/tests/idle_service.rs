@@ -1,5 +1,5 @@
-//! Câblage complet de l'atténuation dans le service (source de repli Mutter simulée
-//! sur un bus privé) : réglages → source → blocages → machine d'états → écrans.
+//! Full dimming wiring in the service (simulated Mutter fallback source
+//! on a private bus): settings → source → blockers → state machine → displays.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::io::{BufRead, BufReader};
@@ -57,7 +57,7 @@ impl PrivateBus {
 
 impl Drop for PrivateBus {
     fn drop(&mut self) {
-        // Le bus privé n'a plus d'utilité ; une erreur ici n'a aucune conséquence.
+        // The private bus is no longer needed; an error here has no consequence.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -156,7 +156,7 @@ async fn the_service_dims_on_idle_respects_blockers_and_restores_on_activity() {
     };
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
     let service = tokio::spawn(run(options, async move {
-        // Arrêt demandé par le test ; un canal fermé vaut aussi arrêt.
+        // Shutdown requested by the test; a closed channel also means shutdown.
         let _ = stopped.await;
     }));
 
@@ -178,12 +178,12 @@ async fn the_service_dims_on_idle_respects_blockers_and_restores_on_activity() {
     proxy.set_master(60).await.unwrap();
     until("écran à 60", || control.raw() == 60).await;
 
-    // Une vidéo est en cours (inhibiteur du bureau) : inactif depuis 6 min, mais pas d'atténuation.
+    // A video is playing (desktop inhibitor): idle for 6 min, but no dimming.
     inhibited.store(true, Ordering::SeqCst);
     idle_ms.store(360_000, Ordering::SeqCst);
     tokio::time::sleep(Duration::from_millis(4_500)).await;
     assert_eq!(control.raw(), 60, "inhibiteur actif : pas d'atténuation");
-    // La vidéo se termine : l'écran s'atténue à la sonde suivante (toutes les 2 s).
+    // The video ends: the display dims at the next probe (every 2 s).
     inhibited.store(false, Ordering::SeqCst);
     until("atténuation", || control.raw() == 5).await;
     assert_eq!(

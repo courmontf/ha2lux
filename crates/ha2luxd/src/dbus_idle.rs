@@ -1,9 +1,9 @@
-//! Repli D-Bus pour l'inactivité : `org.gnome.Mutter.IdleMonitor` (GNOME), seul
-//! service dont l'unité (millisecondes) est définie sans ambiguïté.
+//! D-Bus fallback for idle detection: `org.gnome.Mutter.IdleMonitor` (GNOME), the only
+//! service whose unit (milliseconds) is unambiguously defined.
 //!
-//! Sur KDE Plasma, `org.freedesktop.ScreenSaver.GetSessionIdleTime` n'est pas pris
-//! en charge sous Wayland et son unité varie selon les versions : KDE passe donc
-//! par le protocole Wayland (`wayland`), pas par ce module.
+//! On KDE Plasma, `org.freedesktop.ScreenSaver.GetSessionIdleTime` is not supported
+//! under Wayland and its unit varies between versions: KDE therefore goes
+//! through the Wayland protocol (`wayland`), not through this module.
 
 use crate::idle::IdleTime;
 
@@ -22,13 +22,13 @@ mod proxies {
 
 use proxies::MutterIdleProxy;
 
-/// Inactivité de la session lue chez Mutter.
+/// Session idle time read from Mutter.
 pub struct MutterIdleTime {
     connection: zbus::Connection,
 }
 
 impl MutterIdleTime {
-    /// Lit l'inactivité par la connexion au bus de session donnée.
+    /// Reads the idle time through the given session bus connection.
     pub fn new(connection: zbus::Connection) -> Self {
         Self { connection }
     }

@@ -1,4 +1,4 @@
-//! Backend DDC/CI contre un faux moniteur : aucune E/S réelle, aucun `sleep`.
+//! DDC/CI backend against a fake monitor: no real I/O, no `sleep`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -248,9 +248,9 @@ async fn two_displays_on_one_bus_never_overlap() {
     );
 }
 
-/// Un thread bloqué dans le noyau : l'appelant abandonne l'attente (comme lors d'un
-/// timeout), mais le verrou du bus et le garde « opération en cours » ne sont
-/// libérés qu'à la fin réelle du thread.
+/// A thread stuck in the kernel: the caller gives up waiting (as on a
+/// timeout), but the bus lock and the "operation in progress" guard are
+/// only released when the thread really ends.
 #[tokio::test]
 async fn abandoned_operation_keeps_bus_locked_and_blocks_reuse_until_it_ends() {
     let monitor = MonitorControl::new(10, 100);
@@ -268,16 +268,16 @@ async fn abandoned_operation_keeps_bus_locked_and_blocks_reuse_until_it_ends() {
             _ = &mut read => panic!("la lecture ne peut pas aboutir : l'écran est coincé"),
             () = monitor.entered.notified() => {}
         }
-        // `read` est abandonnée ici, thread toujours bloqué dans le « noyau ».
+        // `read` is abandoned here, thread still stuck in the "kernel".
     }
 
-    // Même écran : refus immédiat, aucun second thread empilé.
+    // Same display: immediate refusal, no second thread piled up.
     let again = hung.read().await.unwrap_err();
     assert!(
         matches!(&again, BackendError::Transient(m) if m.contains("previous")),
         "{again}"
     );
-    // Autre écran sur le même bus : le verrou est toujours tenu.
+    // Other display on the same bus: the lock is still held.
     {
         let blocked = neighbour.read();
         tokio::pin!(blocked);
@@ -313,7 +313,7 @@ async fn abandoned_operation_keeps_bus_locked_and_blocks_reuse_until_it_ends() {
     );
 }
 
-/// Tâche d'écran + backend DDC : une rafale ne laisse partir que la dernière valeur.
+/// Display task + DDC backend: a burst lets only the last value through.
 #[tokio::test]
 async fn display_task_over_ddc_writes_the_final_value() {
     let (mut backend, monitor, _) = setup(0, 100);

@@ -1,5 +1,5 @@
-//! Tâche d'écran : coalescence, cadence, retries, cooldown, timeouts (T-DDC-10).
-//! Temps virtuel de tokio (`start_paused`) : aucun `sleep` réel.
+//! Display task: coalescing, pacing, retries, cooldown, timeouts (T-DDC-10).
+//! Tokio virtual time (`start_paused`): no real `sleep`.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::time::Duration;
@@ -36,7 +36,7 @@ async fn t_ddc_10_burst_is_coalesced_and_last_value_written() {
     let start = Instant::now();
     for value in 1..=100u32 {
         handle.set_target(value);
-        sleep(MS(2)).await; // 100 valeurs en 200 ms
+        sleep(MS(2)).await; // 100 values in 200 ms
     }
     sleep(MS(500)).await;
     let writes = control.write_times();
@@ -123,7 +123,7 @@ async fn retry_uses_the_latest_target() {
     let (handle, control, _rx) = display("A", 100, TaskConfig::ddc());
     control.fail_next_writes(1, transient());
     handle.set_target(10);
-    sleep(MS(10)).await; // 1ʳᵉ tentative échouée, backoff en cours
+    sleep(MS(10)).await; // 1st attempt failed, backoff in progress
     handle.set_target(20);
     sleep(Duration::from_secs(1)).await;
     assert_eq!(
@@ -151,7 +151,7 @@ async fn failures_freeze_writes_then_single_final_write_at_thaw() {
         matches!(&events[1], DisplayEvent::CoolingDown { duration, .. } if *duration == Duration::from_secs(5))
     );
 
-    // Pendant le gel, la cible évolue mais rien n'est tenté.
+    // While frozen, the target evolves but nothing is attempted.
     for value in [20, 30] {
         handle.set_target(value);
         sleep(Duration::from_secs(1)).await;
@@ -290,7 +290,7 @@ async fn hung_read_times_out_and_is_counted() {
         "timeout dur de 2 s"
     );
     assert_eq!(handle.stats().abandoned_ops, 1);
-    // La tâche reste vivante et utilisable après l'abandon.
+    // The task stays alive and usable after the abandonment.
     control.set_hang(false);
     assert_eq!(handle.read().await.unwrap(), 0);
     handle.shutdown().await;
@@ -301,7 +301,7 @@ async fn shutdown_flushes_the_final_value_respecting_cadence() {
     let (handle, control, _rx) = display("A", 100, TaskConfig::ddc());
     handle.set_target(10);
     sleep(MS(1)).await;
-    handle.set_target(77); // en attente de la cadence de 50 ms
+    handle.set_target(77); // waiting for the 50 ms pacing
     handle.shutdown().await;
     assert_eq!(
         control.writes(),
@@ -326,7 +326,7 @@ async fn forced_target_rewrites_an_identical_value() {
     let (handle, control, mut rx) = display("A", 100, TaskConfig::ddc());
     handle.set_target(40);
     sleep(MS(100)).await;
-    control.set_raw(100); // l'écran s'est remis à 100 % tout seul
+    control.set_raw(100); // the display reset itself to 100% on its own
     handle.set_target(40);
     sleep(MS(100)).await;
     assert_eq!(
@@ -343,7 +343,7 @@ async fn forced_target_rewrites_an_identical_value() {
         2,
         "un événement Applied par écriture réelle"
     );
-    // Une écriture forcée n'est faite qu'une fois ; la cible suivante redevient normale.
+    // A forced write is done only once; the following target becomes normal again.
     handle.set_target(40);
     sleep(MS(100)).await;
     assert_eq!(control.writes().len(), 2);

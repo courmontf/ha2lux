@@ -1,5 +1,5 @@
-# Activation D-Bus : le premier appel à org.ha2lux.Daemon (CLI, tray) démarre l'unité systemd.
-# À installer vous-même, par ex. : install -Dm644 packaging/dbus/org.ha2lux.Daemon.service \
+# D-Bus activation: the first call to org.ha2lux.Daemon (CLI, tray) starts the systemd unit.
+# Install it yourself, e.g.: install -Dm644 packaging/dbus/org.ha2lux.Daemon.service \
 #   ~/.local/share/dbus-1/services/org.ha2lux.Daemon.service
 [D-BUS Service]
 Name=org.ha2lux.Daemon

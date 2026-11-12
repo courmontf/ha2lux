@@ -1,6 +1,6 @@
 [package]
 name = "ha2lux-secrets"
-description = "Stockage du jeton Home Assistant : trousseau du bureau (Secret Service) avec repli fichier 0600."
+description = "Home Assistant token storage: desktop keyring (Secret Service) with a 0600 file fallback."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

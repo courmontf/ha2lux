@@ -1,11 +1,11 @@
-//! Atténuation à l'inactivité : pilote qui transforme une **source d'inactivité**
-//! (Wayland `ext-idle-notify-v1`, ou repli D-Bus) et des **blocages** (inhibiteurs,
-//! micro/caméra) en événements pour la machine d'états.
+//! Idle dimming: driver that turns an **idle source**
+//! (Wayland `ext-idle-notify-v1`, or D-Bus fallback) and **blockers** (inhibitors,
+//! mic/camera) into events for the state machine.
 //!
-//! La décision (atténuer, restaurer, tenir compte d'un blocage apparu après coup)
-//! reste entièrement dans la machine d'états ; ce module ne fait que mesurer.
-//! Il ne sonde les blocages que lorsque le seuil d'inactivité est dépassé : tant que
-//! l'utilisateur travaille, aucune sonde coûteuse n'est lancée.
+//! The decision (dim, restore, account for a blocker that appeared later)
+//! stays entirely in the state machine; this module only measures.
+//! It only probes the blockers once the idle threshold is exceeded: as long as
+//! the user is working, no costly probe is launched.
 
 use std::future::Future;
 use std::time::Duration;
@@ -15,50 +15,50 @@ use tokio::time::Instant;
 
 use crate::actor::DaemonHandle;
 
-/// Période de réévaluation des blocages tant que le seuil est dépassé (≤ 1 sonde / 2 s).
+/// Re-evaluation period of the blockers while the threshold is exceeded (at most 1 probe / 2 s).
 pub const PROBE_PERIOD: Duration = Duration::from_secs(2);
-/// Attente avant de relancer une source qui s'est arrêtée (compositeur redémarré…).
+/// Wait before restarting a source that has stopped (compositor restarted...).
 pub const SOURCE_RETRY: Duration = Duration::from_secs(30);
 
-/// Changement d'état d'inactivité signalé par le compositeur.
+/// Idle state change reported by the compositor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IdleEvent {
-    /// Le délai d'inactivité demandé est écoulé.
+    /// The requested idle delay has elapsed.
     Idled,
-    /// L'utilisateur est revenu (clavier, souris, tactile).
+    /// The user is back (keyboard, mouse, touch).
     Resumed,
 }
 
-/// Source d'inactivité pilotée par événements.
+/// Event-driven idle source.
 pub trait IdleSource: Send {
-    /// Prochain événement ; `None` si la source s'est arrêtée. **Annulable sans perte** :
-    /// le pilote peut abandonner l'attente pour sonder les blocages.
+    /// Next event; `None` if the source has stopped. **Cancel-safe**:
+    /// the driver may abandon the wait to probe the blockers.
     fn next_event(&mut self) -> impl Future<Output = Option<IdleEvent>> + Send;
 }
 
-/// Source d'inactivité interrogée périodiquement (repli D-Bus).
+/// Periodically polled idle source (D-Bus fallback).
 pub trait IdleTime: Send {
-    /// Durée d'inactivité de la session en millisecondes, si elle est disponible.
+    /// Session idle time in milliseconds, if available.
     fn idle_ms(&mut self) -> impl Future<Output = Option<u64>> + Send;
 }
 
-/// Résultat d'une sonde des blocages.
+/// Result of a blockers probe.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BlockReport {
-    /// Raisons lisibles (« inhibiteur : lecteur vidéo », « microphone en cours d'utilisation »…).
+    /// Human-readable reasons (« inhibiteur : lecteur vidéo », « microphone en cours d'utilisation »...).
     pub reasons: Vec<String>,
 }
 
 impl BlockReport {
-    /// Au moins un blocage est actif.
+    /// At least one blocker is active.
     pub fn blocked(&self) -> bool {
         !self.reasons.is_empty()
     }
 }
 
-/// Sonde des blocages : inhibiteurs d'inactivité, micro, caméra.
+/// Blockers probe: idle inhibitors, mic, camera.
 pub trait Blockers: Send {
-    /// Sonde les blocages actuels.
+    /// Probes the current blockers.
     fn probe(&mut self) -> impl Future<Output = BlockReport> + Send;
 }
 
@@ -66,8 +66,8 @@ fn elapsed_ms(since: Instant) -> u64 {
     u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
-/// Pilote une source par événements. Rend la main quand la source s'arrête ou que le
-/// démon est arrêté.
+/// Drives an event-driven source. Returns when the source stops or the
+/// daemon is stopped.
 pub async fn drive_events<S: IdleSource, B: Blockers>(
     handle: &DaemonHandle,
     source: &mut S,
@@ -115,7 +115,7 @@ pub async fn drive_events<S: IdleSource, B: Blockers>(
     }
 }
 
-/// Pilote une source interrogée périodiquement. Ne rend jamais la main, sauf arrêt du démon.
+/// Drives a periodically polled source. Never returns, except when the daemon stops.
 pub async fn drive_polled<T: IdleTime, B: Blockers>(
     handle: &DaemonHandle,
     time: &mut T,
@@ -131,7 +131,7 @@ pub async fn drive_polled<T: IdleTime, B: Blockers>(
         };
         let idle = idle_ms >= threshold_ms;
         if !idle && !was_idle {
-            continue; // l'utilisateur travaille : rien à signaler, aucune sonde
+            continue; // the user is working: nothing to report, no probe
         }
         let blocked = idle && blockers.probe().await.blocked();
         was_idle = idle;
@@ -145,9 +145,9 @@ pub async fn drive_polled<T: IdleTime, B: Blockers>(
     }
 }
 
-/// Relance `start(seuil)` chaque fois que les réglages d'atténuation changent
-/// (activation, délai), et quand la source s'arrête (après [`SOURCE_RETRY`]). Désactivée,
-/// aucune source n'est ouverte. Rend la main quand le démon s'arrête.
+/// Restarts `start(threshold)` whenever the dimming settings change
+/// (activation, delay), and when the source stops (after [`SOURCE_RETRY`]). When disabled,
+/// no source is opened. Returns when the daemon stops.
 pub async fn supervise<F, Fut>(handle: DaemonHandle, mut start: F)
 where
     F: FnMut(u64) -> Fut,
@@ -175,7 +175,7 @@ where
             let threshold_ms = u64::from(minutes) * 60_000;
             tokio::select! {
                 () = start(threshold_ms) => {
-                    // La source s'est arrêtée : nouvelle tentative plus tard, sauf changement de réglages.
+                    // The source has stopped: retry later, unless the settings change.
                     tokio::select! {
                         () = tokio::time::sleep(SOURCE_RETRY) => {}
                         alive = &mut settings_changed => if !alive { return },

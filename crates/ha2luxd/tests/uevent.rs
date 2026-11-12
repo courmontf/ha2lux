@@ -1,4 +1,4 @@
-//! Événements noyau : analyse, filtrage, sondage de sysfs, socket netlink.
+//! Kernel events: parsing, filtering, sysfs polling, netlink socket.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -68,7 +68,7 @@ fn display_relevant_events() {
 
 #[test]
 fn malformed_and_foreign_messages_are_ignored() {
-    // Message libudev (groupe 2) : en-tête binaire, pas « action@devpath ».
+    // libudev message (group 2): binary header, not "action@devpath".
     let mut libudev = b"libudev\0".to_vec();
     libudev.extend_from_slice(&[0xfe, 0xed, 0xca, 0xfe, 0x28, 0x00, 0x00, 0x00]);
     assert_eq!(parse_uevent(&libudev), None);
@@ -87,7 +87,7 @@ fn malformed_and_foreign_messages_are_ignored() {
         None,
         "UTF-8 invalide"
     );
-    // Variables bizarres : ignorées sans casser le reste.
+    // Odd variables: ignored without breaking the rest.
     let event = parse_uevent(&message(&[
         "add@/devices/x",
         "NOEQUALS",
@@ -164,7 +164,7 @@ async fn the_sysfs_poller_triggers_a_rescan_when_a_connector_changes() {
     poller.abort();
 }
 
-/// Ouvre réellement le socket netlink d'événements noyau (lecture seule, aucun droit requis).
+/// Actually opens the kernel-event netlink socket (read-only, no privileges required).
 #[tokio::test]
 async fn the_kernel_uevent_socket_can_be_opened_and_bound() {
     use netlink_sys::protocols::NETLINK_KOBJECT_UEVENT;

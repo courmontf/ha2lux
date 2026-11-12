@@ -1,9 +1,9 @@
-//! Source d'inactivité Wayland : protocole `ext-idle-notify-v1`.
+//! Wayland idle source: `ext-idle-notify-v1` protocol.
 //!
-//! La connexion vit dans un thread dédié (boucle d'événements Wayland avec un
-//! `poll` borné, pour pouvoir s'arrêter) ; les changements d'état sont renvoyés
-//! au runtime par un canal. Le compositeur compte l'inactivité de la **session**
-//! (clavier, souris, tactile) et respecte ses propres inhibiteurs d'inactivité.
+//! The connection lives in a dedicated thread (Wayland event loop with a bounded
+//! `poll`, so it can stop); state changes are sent back
+//! to the runtime through a channel. The compositor counts the **session** idle time
+//! (keyboard, mouse, touch) and honors its own idle inhibitors.
 
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
@@ -24,16 +24,16 @@ use wayland_protocols::ext::idle_notify::v1::client::ext_idle_notifier_v1::ExtId
 
 use crate::idle::{IdleEvent, IdleSource};
 
-/// Impossible d'obtenir une source Wayland.
+/// Unable to obtain a Wayland source.
 #[derive(Debug, Error)]
 pub enum WaylandError {
-    /// Pas de session Wayland ou connexion refusée.
+    /// No Wayland session or connection refused.
     #[error("Wayland connection failed: {0}")]
     Connect(String),
-    /// Le compositeur n'expose pas `ext_idle_notifier_v1` (ou pas de `wl_seat`).
+    /// The compositor does not expose `ext_idle_notifier_v1` (or no `wl_seat`).
     #[error("the compositor does not provide {0}")]
     MissingGlobal(&'static str),
-    /// Erreur de protocole.
+    /// Protocol error.
     #[error("Wayland error: {0}")]
     Protocol(String),
 }
@@ -92,26 +92,26 @@ impl Dispatch<ExtIdleNotificationV1, ()> for State {
             ext_idle_notification_v1::Event::Resumed => IdleEvent::Resumed,
             _ => return,
         };
-        // Le récepteur disparaît à l'arrêt de la source : rien à faire.
+        // The receiver goes away when the source stops: nothing to do.
         let _ = state.events.send(mapped);
     }
 }
 
-/// Source d'inactivité Wayland.
+/// Wayland idle source.
 pub struct WaylandIdle {
     events: mpsc::UnboundedReceiver<IdleEvent>,
     stop: Arc<AtomicBool>,
 }
 
 impl WaylandIdle {
-    /// Se connecte au compositeur de la session (`WAYLAND_DISPLAY`).
+    /// Connects to the session's compositor (`WAYLAND_DISPLAY`).
     pub fn connect(threshold_ms: u32) -> Result<Self, WaylandError> {
         let connection =
             Connection::connect_to_env().map_err(|e| WaylandError::Connect(e.to_string()))?;
         Self::start(connection, threshold_ms)
     }
 
-    /// Se connecte par un socket déjà ouvert (compositeur de test).
+    /// Connects through an already open socket (test compositor).
     pub fn from_stream(stream: UnixStream, threshold_ms: u32) -> Result<Self, WaylandError> {
         let connection =
             Connection::from_socket(stream).map_err(|e| WaylandError::Connect(e.to_string()))?;
@@ -140,7 +140,7 @@ impl WaylandIdle {
         std::thread::Builder::new()
             .name("ha2lux-wayland-idle".to_owned())
             .spawn(move || {
-                // Garde la notification vivante tant que le thread tourne.
+                // Keeps the notification alive as long as the thread runs.
                 let _keep = (_notification, notifier, seat);
                 let poll_timeout = Timespec {
                     tv_sec: 0,
@@ -151,7 +151,7 @@ impl WaylandIdle {
                         break;
                     }
                     let Some(guard) = queue.prepare_read() else {
-                        continue; // des événements sont déjà en attente
+                        continue; // events are already pending
                     };
                     let readable = {
                         let fd = guard.connection_fd();
@@ -159,7 +159,7 @@ impl WaylandIdle {
                         matches!(poll(&mut fds, Some(&poll_timeout)), Ok(n) if n > 0)
                     };
                     if readable && guard.read().is_err() {
-                        break; // connexion perdue : le canal se ferme, le pilote relancera
+                        break; // connection lost: the channel closes, the driver will restart
                     }
                 }
             })
@@ -170,7 +170,7 @@ impl WaylandIdle {
 
 impl Drop for WaylandIdle {
     fn drop(&mut self) {
-        // Le thread s'arrête de lui-même au prochain tour de boucle (≤ 250 ms).
+        // The thread stops by itself on the next loop iteration (<= 250 ms).
         self.stop.store(true, Ordering::Release);
     }
 }
@@ -181,5 +181,5 @@ impl IdleSource for WaylandIdle {
     }
 }
 
-/// Une demande d'attente : utile pour borner la durée d'une connexion dans un test.
+/// A wait request: useful to bound the duration of a connection in a test.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);

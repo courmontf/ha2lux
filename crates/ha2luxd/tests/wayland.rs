@@ -1,5 +1,5 @@
-//! Source Wayland `ext-idle-notify-v1` contre un faux compositeur (vrai protocole, sur
-//! une paire de sockets : aucune variable d'environnement ni session réelle).
+//! Wayland `ext-idle-notify-v1` source against a fake compositor (real protocol, over
+//! a socket pair: no environment variable or real session).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::os::unix::net::UnixStream;
@@ -108,7 +108,7 @@ enum Command {
     Quit,
 }
 
-/// Lance le faux compositeur dans un thread ; renvoie le socket client et le canal de commandes.
+/// Starts the fake compositor in a thread; returns the client socket and the command channel.
 fn compositor(
     with_notifier: bool,
 ) -> (
@@ -141,7 +141,7 @@ fn compositor(
                         .iter()
                         .for_each(ExtIdleNotificationV1::resumed),
                     Command::Timeouts(reply) => {
-                        // Le demandeur peut avoir abandonné l'attente : sans importance.
+                        // The requester may have given up waiting: irrelevant.
                         let _ = reply.send(state.timeouts.clone());
                     }
                     Command::Quit => return,
@@ -216,7 +216,7 @@ async fn the_source_ends_when_the_compositor_goes_away() {
     let (stream, commands, thread) = compositor(true);
     let mut source = connect(stream, 60_000).await.unwrap();
     commands.send(Command::Quit).unwrap();
-    thread.join().unwrap(); // le compositeur disparaît : son socket se ferme
+    thread.join().unwrap(); // the compositor goes away: its socket closes
     let ended = tokio::time::timeout(Duration::from_secs(5), source.next_event())
         .await
         .expect("la source doit se terminer");
@@ -225,14 +225,14 @@ async fn the_source_ends_when_the_compositor_goes_away() {
 
 #[test]
 fn connecting_without_a_wayland_session_is_an_error_not_a_panic() {
-    // Un socket vers rien : le protocole échoue proprement.
+    // A socket to nothing: the protocol fails cleanly.
     let (a, b) = UnixStream::pair().unwrap();
     drop(b);
     assert!(WaylandIdle::from_stream(a, 1_000).is_err());
 }
 
-/// Smoke test sur le **vrai compositeur** de la session (lecture seule : crée une notification
-/// d'inactivité de 24 h qui ne se déclenche jamais, puis se ferme). Ignoré par défaut.
+/// Smoke test on the session's **real compositor** (read-only: creates an idle
+/// notification of 24 h that never fires, then closes). Ignored by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "se connecte au compositeur Wayland réel de la session ; à lancer à la main"]
 async fn real_compositor_supports_ext_idle_notify() {

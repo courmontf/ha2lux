@@ -1,27 +1,27 @@
-//! Sélection d'un écran par numéro, nom exact ou sous-chaîne (spec §11.1).
+//! Selecting a display by number, exact name or substring (spec §11.1).
 
 use std::fmt;
 
 use ha2lux_i18n::t;
 use ha2lux_ipc::DisplayDto;
 
-/// Échec de sélection ; porte de quoi expliquer à l'utilisateur.
+/// Selection failure; carries enough to explain to the user.
 #[derive(Debug, PartialEq, Eq)]
 pub enum SelectError {
-    /// Numéro hors de la liste (ou nul).
+    /// Number outside the list (or zero).
     OutOfRange {
-        /// Numéro demandé.
+        /// Requested number.
         given: String,
-        /// Nombre d'écrans.
+        /// Number of displays.
         count: usize,
     },
-    /// Aucun écran ne correspond.
+    /// No display matches.
     NotFound(String),
-    /// Plusieurs écrans correspondent ; numéros (à partir de 1).
+    /// Several displays match; numbers (from 1).
     Ambiguous {
-        /// Texte saisi.
+        /// Text entered.
         spec: String,
-        /// Numéros des candidats.
+        /// Candidate numbers.
         numbers: Vec<usize>,
     },
 }
@@ -57,9 +57,9 @@ fn lower(text: &str) -> String {
     text.to_lowercase()
 }
 
-/// Choisit un écran : un nombre est une position dans `list` (à partir de 1) ;
-/// sinon nom exact unique, puis sous-chaîne unique, insensibles à la casse.
-/// Renvoie la position (à partir de 1) et l'écran.
+/// Picks a display: a number is a position in `list` (from 1);
+/// otherwise a unique exact name, then a unique substring, case-insensitive.
+/// Returns the position (from 1) and the display.
 pub fn select<'a>(
     list: &'a [DisplayDto],
     spec: &str,

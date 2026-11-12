@@ -1,11 +1,11 @@
-//! Molette : les crans sont **comptés**, puis appliqués en un seul message.
+//! Wheel: notches are **counted**, then applied in a single message.
 //!
-//! Sans cela, une rafale de crans produirait autant de messages que de crans et la
-//! luminosité continuerait de bouger après l'arrêt de la molette.
+//! Without this, a burst of notches would produce as many messages as notches and the
+//! brightness would keep moving after the wheel stops.
 
 use std::time::Duration;
 
-/// Délai de regroupement des crans avant envoi.
+/// Delay for batching notches before sending.
 pub const FLUSH_AFTER: Duration = Duration::from_millis(60);
 
 /// Accumulateur de crans.
@@ -15,18 +15,18 @@ pub struct Wheel {
 }
 
 impl Wheel {
-    /// Enregistre un cran (positif : plus lumineux).
+    /// Records a notch (positive: brighter).
     pub fn push(&mut self, notches: i32) {
         self.notches = self.notches.saturating_add(notches);
     }
 
-    /// Des crans attendent d'être appliqués.
+    /// Notches are waiting to be applied.
     pub fn pending(&self) -> bool {
         self.notches != 0
     }
 
-    /// Retire les crans accumulés et renvoie la variation totale du maître, en
-    /// pourcentage (`crans × pas`), bornée à ±100 ; `None` s'ils s'annulent.
+    /// Takes the accumulated notches and returns the total master change, as a
+    /// percentage (`notches × step`), clamped to ±100; `None` if they cancel out.
     pub fn take(&mut self, step: u8) -> Option<i32> {
         let notches = std::mem::take(&mut self.notches);
         let delta = notches.saturating_mul(i32::from(step)).clamp(-100, 100);

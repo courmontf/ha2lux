@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CI locale : formatage, clippy, tests, et cargo-deny s'il est installé.
+# Local CI: formatting, clippy, tests, and cargo-deny if installed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.cargo/bin:$PWD/target/tools/bin:$PATH"   # outils locaux : cargo install --root target/tools cargo-deny cargo-audit

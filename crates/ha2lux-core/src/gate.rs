@@ -1,13 +1,13 @@
-//! Porte d'hystérésis sur le niveau cible (spec §8.5).
+//! Hysteresis gate on the target level (spec §8.5).
 
-/// Réglages de la porte.
+/// Gate settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GateParams {
-    /// Écart à partir duquel on applique immédiatement.
+    /// Gap from which the level is applied immediately.
     pub immediate: u8,
-    /// Écart minimal pour compter une décision.
+    /// Minimum gap for a decision to count.
     pub minimum: u8,
-    /// Nombre de décisions consécutives de même sens requises.
+    /// Number of consecutive decisions in the same direction required.
     pub confirmations: u8,
 }
 
@@ -21,7 +21,7 @@ impl Default for GateParams {
     }
 }
 
-/// Porte : décide si un niveau cible doit être appliqué.
+/// Gate: decides whether a target level must be applied.
 #[derive(Clone, Debug, Default)]
 pub struct Gate {
     params: GateParams,
@@ -31,7 +31,7 @@ pub struct Gate {
 }
 
 impl Gate {
-    /// Porte avec les réglages donnés.
+    /// Gate with the given settings.
     pub fn new(params: GateParams) -> Self {
         Self {
             params,
@@ -39,29 +39,29 @@ impl Gate {
         }
     }
 
-    /// Oublie le dernier niveau appliqué : la prochaine cible sera appliquée.
+    /// Forgets the last applied level: the next target will be applied.
     pub fn reset(&mut self) {
         self.last_applied = None;
         self.streak = 0;
         self.direction = 0;
     }
 
-    /// Réinitialise en déclarant `level` comme dernier niveau appliqué
-    /// (après un apprentissage ou une application forcée).
+    /// Resets by declaring `level` as the last applied level
+    /// (after learning or a forced apply).
     pub fn reset_to(&mut self, level: u8) {
         self.last_applied = Some(level);
         self.streak = 0;
         self.direction = 0;
     }
 
-    /// Dernier niveau appliqué.
+    /// Last applied level.
     pub fn last_applied(&self) -> Option<u8> {
         self.last_applied
     }
 
-    /// Décide pour la cible `target` ; si oui, elle devient le dernier niveau
-    /// appliqué. L'appelant doit rappeler [`Gate::reset_to`] si l'écriture
-    /// matérielle échoue.
+    /// Decides for the target `target`; if so, it becomes the last applied
+    /// level. The caller must call [`Gate::reset_to`] again if the hardware
+    /// write fails.
     pub fn decide(&mut self, target: u8) -> bool {
         let Some(last) = self.last_applied else {
             self.reset_to(target);

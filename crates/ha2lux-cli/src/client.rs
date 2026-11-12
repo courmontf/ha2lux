@@ -1,5 +1,5 @@
-//! Accès au démon : un trait minuscule (pour tester sans bus) et son
-//! implémentation D-Bus, avec classement des échecs en codes de sortie.
+//! Daemon access: a tiny trait (to test without a bus) and its
+//! D-Bus implementation, with failures classified into exit codes.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -9,7 +9,7 @@ use ha2lux_ipc::{DaemonProxy, DisplayDto, ErrorKind, classify};
 use serde::Serialize;
 use zbus::zvariant::OwnedValue;
 
-/// Jeton : son `Debug` ne le montre jamais.
+/// Token: its `Debug` never shows it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Secret(pub String);
 
@@ -19,77 +19,77 @@ impl std::fmt::Debug for Secret {
     }
 }
 
-/// Appel adressé au démon.
+/// Call addressed to the daemon.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Call {
-    /// Enregistre le jeton Home Assistant.
+    /// Stores the Home Assistant token.
     SetToken(Secret),
-    /// Supprime le jeton Home Assistant.
+    /// Deletes the Home Assistant token.
     ClearToken,
-    /// Capteurs d'éclairement de Home Assistant.
+    /// Home Assistant illuminance sensors.
     Sensors,
-    /// Niveau maître.
+    /// Master level.
     SetMaster(u32),
-    /// Variation du maître.
+    /// Master delta.
     StepMaster(i32),
-    /// Niveau direct d'un écran.
+    /// Direct level of a display.
     SetDisplay {
-        /// Identité de l'écran.
+        /// Display identity.
         id: String,
-        /// Niveau 0-100.
+        /// Level 0-100.
         level: u32,
     },
-    /// Preset par nom.
+    /// Preset by name.
     ApplyPreset(String),
-    /// Fonction activable.
+    /// Toggleable feature.
     SetMode {
-        /// `schedule`, `idle-dim` ou `auto`.
+        /// `schedule`, `idle-dim` or `auto`.
         feature: &'static str,
-        /// Nouvel état.
+        /// New state.
         on: bool,
     },
-    /// Relance l'énumération.
+    /// Restarts enumeration.
     Rescan,
-    /// Recharge la configuration.
+    /// Reloads the configuration.
     Reload,
-    /// Oublie la courbe apprise.
+    /// Forgets the learned curve.
     ResetCurve,
-    /// Liste des écrans.
+    /// List of displays.
     List,
-    /// État du démon.
+    /// Daemon state.
     Status,
 }
 
-/// Réponse du démon.
+/// Daemon response.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Answer {
-    /// Commande exécutée.
+    /// Command executed.
     Done,
-    /// Liste des écrans.
+    /// List of displays.
     List(Vec<DisplayDto>),
-    /// Capteurs d'éclairement : (entité, nom, pièce).
+    /// Illuminance sensors: (entity, name, room).
     Sensors(Vec<(String, String, String)>),
-    /// État du démon.
+    /// Daemon state.
     Status(Box<StatusInfo>),
 }
 
-/// Échec d'un appel, classé selon le code de sortie à renvoyer.
+/// Call failure, classified by the exit code to return.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CallError {
-    /// Démon absent (nom D-Bus sans propriétaire, pas de bus) : code 2.
+    /// Daemon absent (D-Bus name without owner, no bus): code 2.
     Absent(String),
-    /// Démon sans réponse dans le délai : code 4.
+    /// Daemon did not answer in time: code 4.
     NoReply(String),
-    /// Argument invalide ou hors bornes, refusé par le démon : code 1.
+    /// Invalid or out-of-range argument, rejected by the daemon: code 1.
     Usage(String),
-    /// Commande refusée (écran ou preset inconnu, indisponible…) : code 3.
+    /// Command rejected (unknown or unavailable display or preset, etc.): code 3.
     Failed(String),
-    /// Autre anomalie de transport : code 4.
+    /// Other transport anomaly: code 4.
     Other(String),
 }
 
 impl CallError {
-    /// Code de sortie.
+    /// Exit code.
     pub fn exit_code(&self) -> u8 {
         match self {
             Self::Usage(_) => 1,
@@ -99,7 +99,7 @@ impl CallError {
         }
     }
 
-    /// Message à l'attention de l'utilisateur.
+    /// Message for the user.
     pub fn message(&self) -> String {
         match self {
             Self::Absent(detail) => t!("cli-err-daemon-absent", detail = detail.as_str()),
@@ -109,58 +109,58 @@ impl CallError {
     }
 }
 
-/// État du démon, tel que renvoyé par `Status()`.
+/// Daemon state, as returned by `Status()`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct StatusInfo {
-    /// Version du démon.
+    /// Daemon version.
     pub version: String,
-    /// Niveau maître.
+    /// Master level.
     pub master: Option<u8>,
-    /// Source de base (`auto-lux`, `planning`, `static`).
+    /// Base source (`auto-lux`, `planning`, `static`).
     pub mode: String,
-    /// Pas par défaut de `up`/`down`.
+    /// Default step of `up`/`down`.
     pub step: u8,
-    /// Planning activé.
+    /// Schedule enabled.
     pub schedule_enabled: bool,
-    /// Nombre de points du planning.
+    /// Number of schedule points.
     pub schedule_points: u32,
-    /// Heure de reprise du planning suspendu.
+    /// Resume time of the suspended schedule.
     pub schedule_resume: Option<String>,
-    /// Atténuation d'inactivité activée.
+    /// Idle dimming enabled.
     pub idle_enabled: bool,
-    /// Niveau d'atténuation.
+    /// Dimming level.
     pub idle_level: u8,
-    /// Délai d'inactivité (minutes).
+    /// Idle delay (minutes).
     pub idle_minutes: u16,
-    /// Atténuation en cours.
+    /// Dimming in progress.
     pub dimmed: bool,
-    /// Auto-luminosité activée.
+    /// Auto-brightness enabled.
     pub auto_enabled: bool,
-    /// Auto-luminosité configurée.
+    /// Auto-brightness configured.
     pub auto_configured: bool,
-    /// Santé du lien Home Assistant.
+    /// Health of the Home Assistant link.
     pub ha_health: String,
-    /// Configuration illisible.
+    /// Unreadable configuration.
     pub config_error: Option<String>,
-    /// Dernier état brut lu sur Home Assistant.
+    /// Last raw state read from Home Assistant.
     pub ha_raw: Option<String>,
-    /// Flux WebSocket actif.
+    /// WebSocket stream active.
     pub ha_websocket: bool,
-    /// Jeton refusé par Home Assistant.
+    /// Token rejected by Home Assistant.
     pub ha_auth_rejected: bool,
-    /// Jeton enregistré.
+    /// Token stored.
     pub ha_token_present: bool,
-    /// Lux lissé.
+    /// Smoothed lux.
     pub lux_smoothed: Option<f64>,
-    /// Lux le plus récent.
+    /// Most recent lux.
     pub lux_latest: Option<f64>,
-    /// Ajustement en cours.
+    /// Adjustment in progress.
     pub auto_adjusting: bool,
-    /// Niveau visé par la courbe.
+    /// Level targeted by the curve.
     pub auto_target: Option<u8>,
-    /// Courbe (lux, niveau).
+    /// Curve (lux, level).
     pub curve: Vec<(f64, u8)>,
-    /// Courbe par défaut (rien d'appris).
+    /// Default curve (nothing learned).
     pub curve_default: bool,
 }
 
@@ -180,7 +180,7 @@ fn get<T: TryFrom<OwnedValue>>(map: &HashMap<String, OwnedValue>, key: &str) -> 
 }
 
 impl StatusInfo {
-    /// Lit le dictionnaire `a{sv}` du démon ; les clés absentes prennent leur valeur par défaut.
+    /// Reads the daemon's `a{sv}` dictionary; missing keys take their default value.
     pub fn from_map(map: &HashMap<String, OwnedValue>) -> Self {
         let master = get::<i32>(map, "master").and_then(|m| u8::try_from(m).ok());
         Self {
@@ -221,20 +221,20 @@ impl StatusInfo {
     }
 }
 
-/// Le démon vu par la CLI.
+/// The daemon as seen by the CLI.
 pub trait Daemon {
-    /// Exécute un appel.
+    /// Runs a call.
     fn call(&self, call: Call) -> impl Future<Output = Result<Answer, CallError>>;
 }
 
-/// Client D-Bus réel.
+/// Real D-Bus client.
 pub struct ZbusDaemon {
     connection: zbus::Connection,
 }
 
 fn map_error(error: &zbus::Error) -> CallError {
     if let zbus::Error::MethodError(name, detail, _) = error {
-        // Le démon envoie une clé de catalogue + arguments : on la traduit ici.
+        // The daemon sends a catalog key + arguments: we translate it here.
         let detail = ha2lux_i18n::wire::localize(&detail.clone().unwrap_or_default());
         if let Some(kind) = classify(error) {
             return match kind {
@@ -262,8 +262,8 @@ fn map_error(error: &zbus::Error) -> CallError {
 }
 
 impl ZbusDaemon {
-    /// Se connecte au bus de session. Toute erreur de connexion (pas de bus, adresse
-    /// invalide, socket absent) revient à ne pas pouvoir joindre le démon : « absent ».
+    /// Connects to the session bus. Any connection error (no bus, invalid
+    /// address, missing socket) amounts to being unable to reach the daemon: "absent".
     pub async fn connect_session() -> Result<Self, CallError> {
         let connection = zbus::Connection::session()
             .await
@@ -271,7 +271,7 @@ impl ZbusDaemon {
         Ok(Self { connection })
     }
 
-    /// Se connecte à un bus explicite (bus privé des tests).
+    /// Connects to an explicit bus (private bus of the tests).
     pub async fn connect_address(address: &str) -> Result<Self, CallError> {
         let connection = zbus::connection::Builder::address(address)
             .map_err(|e| CallError::Absent(e.to_string()))?

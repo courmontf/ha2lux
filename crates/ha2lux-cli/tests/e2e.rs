@@ -1,5 +1,5 @@
-//! De bout en bout : le vrai binaire `ha2lux` contre le vrai démon (écrans factices),
-//! sur un **bus privé** (jamais la session de l'utilisateur).
+//! End to end: the real `ha2lux` binary against the real daemon (fake displays),
+//! on a **private bus** (never the user's session).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::io::{BufRead, BufReader};
@@ -60,7 +60,7 @@ impl PrivateBus {
 
 impl Drop for PrivateBus {
     fn drop(&mut self) {
-        // Le bus privé n'a plus d'utilité ; une erreur ici n'a aucune conséquence.
+        // The private bus is no longer needed; an error here has no consequence.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -112,7 +112,7 @@ fn start_service(bus: &PrivateBus, config: Option<&str>) -> Service {
     };
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
     let task = tokio::spawn(run(options, async move {
-        // Arrêt demandé par le test ; un canal fermé vaut aussi arrêt.
+        // Shutdown requested by the test; a closed channel also means shutdown.
         let _ = stopped.await;
     }));
     Service {
@@ -125,7 +125,7 @@ fn start_service(bus: &PrivateBus, config: Option<&str>) -> Service {
 
 impl Service {
     async fn stop(self) {
-        // Le service a pu déjà s'arrêter : sans importance.
+        // The service may have already stopped: irrelevant.
         let _ = self.stop.send(());
         self.task.await.unwrap().unwrap();
     }
@@ -154,7 +154,7 @@ struct Run {
     stderr: String,
 }
 
-/// Lance le vrai binaire `ha2lux` (hors de la boucle asynchrone pour ne pas la bloquer).
+/// Runs the real `ha2lux` binary (outside the async loop so as not to block it).
 async fn ha2lux(bus_address: &str, args: &[&str]) -> Run {
     let address = bus_address.to_owned();
     let args: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
@@ -191,7 +191,7 @@ async fn the_real_binary_drives_the_real_daemon() {
     wait_for_name(&bus).await;
     let a = &bus.address;
     until("énumération", || service.control.raw() == 50).await;
-    // Le premier appel peut précéder la fin de l'énumération : on attend la liste.
+    // The first call may precede the end of enumeration: we wait for the list.
     let mut listed = ha2lux(a, &["list"]).await;
     for _ in 0..100 {
         if listed.stdout.contains("Mock A") {
@@ -281,7 +281,7 @@ async fn errors_map_to_exit_codes_through_the_real_binary() {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    // Usage (1) : refusé par la CLI avant tout appel.
+    // Usage (1): rejected by the CLI before any call.
     for bad in [
         &["set", "101"][..],
         &["set"],
@@ -295,7 +295,7 @@ async fn errors_map_to_exit_codes_through_the_real_binary() {
         assert_eq!(run.code, 1, "{bad:?}\n{}", run.stderr);
         assert!(run.stdout.is_empty());
     }
-    // Échec de commande (3) : preset, écran inconnu/ambigu, fonction non configurée.
+    // Command failure (3): preset, unknown/ambiguous display, unconfigured feature.
     let preset = ha2lux(a, &["preset", "Zzz"]).await;
     assert_eq!(preset.code, 3);
     assert!(
@@ -343,7 +343,7 @@ async fn t_cli_15_absent_daemon_gives_exit_2() {
         run.stderr
     );
     assert_eq!(ha2lux(&bus.address, &["--json", "list"]).await.code, 2);
-    // Pas de bus de session du tout : même diagnostic.
+    // No session bus at all: same diagnosis.
     let run = ha2lux("unix:path=/nonexistent/ha2lux-bus", &["list"]).await;
     assert_eq!(run.code, 2, "{}", run.stderr);
 }
@@ -354,7 +354,7 @@ async fn a_daemon_error_of_class_usage_is_exit_1_when_the_cli_check_is_bypassed(
     let service = start_service(&bus, None);
     wait_for_name(&bus).await;
     let daemon = ZbusDaemon::connect_address(&bus.address).await.unwrap();
-    // Un autre client (script, tray) peut envoyer 101 : le démon le refuse lui-même.
+    // Another client (script, tray) can send 101: the daemon rejects it itself.
     let error = daemon.call(Call::SetMaster(101)).await.unwrap_err();
     assert!(matches!(error, CallError::Usage(_)), "{error:?}");
     assert_eq!(error.exit_code(), 1);
@@ -369,7 +369,7 @@ async fn a_daemon_error_of_class_usage_is_exit_1_when_the_cli_check_is_bypassed(
     service.stop().await;
 }
 
-/// Démon qui accepte les appels mais ne répond jamais.
+/// Daemon that accepts calls but never answers.
 struct Silent;
 
 #[zbus::interface(name = "org.ha2lux.Daemon1")]

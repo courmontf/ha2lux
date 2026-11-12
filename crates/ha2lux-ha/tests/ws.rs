@@ -1,4 +1,4 @@
-//! WebSocket Home Assistant contre un vrai serveur local (T-HA-14, T-HA-10 côté WebSocket).
+//! Home Assistant WebSocket against a real local server (T-HA-14, T-HA-10 on the WebSocket side).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -61,7 +61,7 @@ async fn recv(ws: &mut Server) -> Value {
     }
 }
 
-/// Accueil + authentification réussie ; renvoie le message d'authentification reçu.
+/// Greeting + successful authentication; returns the authentication message received.
 async fn greet(ws: &mut Server) -> Value {
     send(
         ws,
@@ -94,7 +94,7 @@ async fn handshake_subscription_events_and_heartbeat() {
         assert_eq!(ping["type"], "ping");
         send(&mut ws, json!({"id": ping["id"], "type": "pong"})).await;
         send(&mut ws, json!({"type": "something_else"})).await;
-        // Garde la connexion ouverte jusqu'à la fermeture par le client.
+        // Keeps the connection open until the client closes it.
         while ws.next().await.is_some() {}
     })
     .await;
@@ -140,7 +140,7 @@ async fn t_ha_14_a_wrong_token_is_an_authentication_error_and_nothing_follows() 
             json!({"type": "auth_invalid", "message": "Invalid access token or password"}),
         )
         .await;
-        // Le client ne doit plus rien envoyer.
+        // The client must not send anything anymore.
         let extra = tokio::time::timeout(Duration::from_millis(300), ws.next()).await;
         assert!(
             !matches!(extra, Ok(Some(Ok(Message::Text(_))))),

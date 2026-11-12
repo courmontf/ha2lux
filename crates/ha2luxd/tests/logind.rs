@@ -1,5 +1,5 @@
-//! Surveillance de logind (veille, réveil, verrouillage, session) contre un **faux logind**
-//! sur un bus privé, avec le vrai démon et des écrans factices.
+//! logind monitoring (suspend, resume, lock, session) against a **fake logind**
+//! on a private bus, with the real daemon and fake displays.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::io::{BufRead, BufReader};
@@ -59,7 +59,7 @@ impl PrivateBus {
 
 impl Drop for PrivateBus {
     fn drop(&mut self) {
-        // Le bus privé n'a plus d'utilité ; une erreur ici n'a aucune conséquence.
+        // The private bus is no longer needed; an error here has no consequence.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -179,7 +179,7 @@ fn start_daemon(bus: &PrivateBus, session_id: Option<&str>) -> Running {
     };
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
     let task = tokio::spawn(run(options, async move {
-        // Arrêt demandé par le test ; un canal fermé vaut aussi arrêt.
+        // Shutdown requested by the test; a closed channel also means shutdown.
         let _ = stopped.await;
     }));
     Running {
@@ -240,7 +240,7 @@ async fn suspend_stops_hardware_writes_and_resume_restores_control() {
     proxy.set_master(40).await.unwrap();
     until("écran à 40", || daemon.control.raw() == 40).await;
 
-    // La surveillance s'abonne après le démarrage : on émet jusqu'à observer l'effet.
+    // The monitor subscribes after startup: we emit until the effect is observed.
     let mut suspended = false;
     for _ in 0..200 {
         emit_sleep(&login, true).await;
@@ -266,7 +266,7 @@ async fn suspend_stops_hardware_writes_and_resume_restores_control() {
 
     emit_sleep(&login, false).await;
     until("réveil : maître appliqué", || {
-        // Les écritures sont de nouveau permises ; la ré-application arrive après le rescan débouncé.
+        // Writes are allowed again; re-application arrives after the debounced rescan.
         daemon.control.raw() == 70
     })
     .await;
@@ -286,7 +286,7 @@ async fn unlock_triggers_a_debounced_rescan_and_lock_does_not() {
         .unwrap();
     wait_daemon(&client).await;
     until("énumération", || daemon.hardware.discoveries() >= 1).await;
-    tokio::time::sleep(Duration::from_millis(300)).await; // laisse la surveillance s'abonner
+    tokio::time::sleep(Duration::from_millis(300)).await; // lets the monitor subscribe
     let calm = daemon.hardware.discoveries();
     let iface = login
         .object_server()
@@ -318,7 +318,7 @@ async fn unlock_triggers_a_debounced_rescan_and_lock_does_not() {
 async fn session_becoming_inactive_pauses_control() {
     let bus = bus_or_skip!();
     let login = fake_logind(&bus).await;
-    let daemon = start_daemon(&bus, None); // sans XDG_SESSION_ID : session graphique de l'utilisateur
+    let daemon = start_daemon(&bus, None); // without XDG_SESSION_ID: the user's graphical session
     let client = zbus::connection::Builder::address(bus.address.as_str())
         .unwrap()
         .build()

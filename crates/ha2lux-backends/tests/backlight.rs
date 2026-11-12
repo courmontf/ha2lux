@@ -1,4 +1,4 @@
-//! Backend backlight : faux sysfs et faux logind, aucune écriture réelle.
+//! Backlight backend: fake sysfs and fake logind, no real writes.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::{Path, PathBuf};
@@ -30,7 +30,7 @@ fn make(
     dir
 }
 
-/// Faux logind : enregistre les appels et simule l'effet sur sysfs.
+/// Fake logind: records the calls and simulates the effect on sysfs.
 #[derive(Clone, Default)]
 struct FakeSetter {
     calls: Arc<Mutex<Vec<(String, u32)>>>,
@@ -213,7 +213,7 @@ fn dbus_errors_are_classified() {
     ));
 }
 
-/// Bout en bout : tâche d'écran + backend backlight + faux sysfs/logind.
+/// End to end: display task + backlight backend + fake sysfs/logind.
 #[tokio::test]
 async fn display_task_drives_backlight_end_to_end() {
     let root = TempDir::new().unwrap();

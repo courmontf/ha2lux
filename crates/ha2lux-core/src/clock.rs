@@ -1,24 +1,24 @@
-//! Horloge injectée : le cœur ne lit jamais l'heure système.
+//! Injected clock: the core never reads the system time.
 
 use crate::schedule::MinuteOfDay;
 
-/// Instant courant vu par la machine d'états.
+/// Current instant as seen by the state machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Now {
-    /// Temps monotone en millisecondes (origine arbitraire).
+    /// Monotonic time in milliseconds (arbitrary origin).
     pub ms: u64,
-    /// Heure locale, en minutes depuis minuit (pour le planning).
+    /// Local time, in minutes since midnight (for the schedule).
     pub minute: MinuteOfDay,
 }
 
-/// Source de temps.
+/// Time source.
 pub trait Clock {
-    /// Instant courant.
+    /// Current instant.
     fn now(&self) -> Now;
 }
 
-/// Horloge virtuelle : le temps n'avance que lorsqu'on le demande
-/// (aucun `sleep` réel dans les tests).
+/// Virtual clock: time only advances when asked to
+/// (no real `sleep` in tests).
 #[derive(Clone, Debug)]
 pub struct VirtualClock {
     start_minute: u16,
@@ -26,7 +26,7 @@ pub struct VirtualClock {
 }
 
 impl VirtualClock {
-    /// Horloge démarrant à l'heure locale `start`.
+    /// Clock starting at local time `start`.
     pub fn new(start: MinuteOfDay) -> Self {
         Self {
             start_minute: start.minutes(),
@@ -34,12 +34,12 @@ impl VirtualClock {
         }
     }
 
-    /// Fait avancer le temps.
+    /// Advances time.
     pub fn advance_ms(&mut self, ms: u64) {
         self.elapsed_ms += ms;
     }
 
-    /// Place le temps monotone à `ms` (jamais en arrière).
+    /// Sets the monotonic time to `ms` (never backwards).
     pub fn advance_to_ms(&mut self, ms: u64) {
         self.elapsed_ms = self.elapsed_ms.max(ms);
     }
@@ -48,7 +48,7 @@ impl VirtualClock {
 impl Clock for VirtualClock {
     fn now(&self) -> Now {
         let total_minutes = (u64::from(self.start_minute) * 60_000 + self.elapsed_ms) / 60_000;
-        // `% 1440` garantit une minute valide ; repli sur minuit sinon.
+        // `% 1440` guarantees a valid minute; falls back to midnight otherwise.
         let minute = MinuteOfDay::new((total_minutes % 1440) as u16).unwrap_or_default();
         Now {
             ms: self.elapsed_ms,

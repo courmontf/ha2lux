@@ -1,4 +1,4 @@
-//! Reconnexion : délais exponentiels plafonnés avec gigue.
+//! Reconnection: capped exponential delays with jitter.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use std::time::Duration;
 

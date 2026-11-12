@@ -1,28 +1,28 @@
-//! Emplacements des fichiers (spec §10.1), selon la convention XDG.
+//! File locations (spec §10.1), following the XDG convention.
 
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-/// Impossible de déterminer les répertoires.
+/// Unable to determine the directories.
 #[derive(Debug, Error)]
 #[error(
     "cannot determine the configuration directories: neither XDG_CONFIG_HOME/XDG_STATE_HOME nor HOME is set"
 )]
 pub struct PathsError;
 
-/// Fichiers du démon.
+/// Daemon files.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Paths {
     /// `$XDG_CONFIG_HOME/ha2lux/config.toml`.
     pub config_file: PathBuf,
     /// `$XDG_STATE_HOME/ha2lux/state.toml`.
     pub state_file: PathBuf,
-    /// `$XDG_CONFIG_HOME/ha2lux/secrets.json` : repli (0600) si le trousseau est absent.
+    /// `$XDG_CONFIG_HOME/ha2lux/secrets.json`: fallback (0600) if the keyring is absent.
     pub secrets_file: PathBuf,
 }
 
-/// Une variable XDG n'est valable que si elle est un chemin absolu.
+/// An XDG variable is only valid if it is an absolute path.
 fn xdg(get: &impl Fn(&str) -> Option<String>, var: &str, home_relative: &str) -> Option<PathBuf> {
     get(var)
         .map(PathBuf::from)
@@ -35,7 +35,7 @@ fn xdg(get: &impl Fn(&str) -> Option<String>, var: &str, home_relative: &str) ->
 }
 
 impl Paths {
-    /// Chemins déduits de l'environnement fourni (injectable pour les tests).
+    /// Paths derived from the supplied environment (injectable for tests).
     pub fn from_env(get: impl Fn(&str) -> Option<String>) -> Result<Self, PathsError> {
         let config = xdg(&get, "XDG_CONFIG_HOME", ".config").ok_or(PathsError)?;
         let state = xdg(&get, "XDG_STATE_HOME", ".local/state").ok_or(PathsError)?;
@@ -46,12 +46,12 @@ impl Paths {
         })
     }
 
-    /// Chemins déduits de l'environnement du processus.
+    /// Paths derived from the process environment.
     pub fn system() -> Result<Self, PathsError> {
         Self::from_env(|name| std::env::var(name).ok().filter(|v| !v.is_empty()))
     }
 
-    /// Les deux fichiers dans un même répertoire (tests).
+    /// Both files in a single directory (tests).
     pub fn in_dir(dir: &Path) -> Self {
         Self {
             secrets_file: dir.join("secrets.json"),

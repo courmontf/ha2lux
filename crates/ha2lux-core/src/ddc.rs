@@ -1,23 +1,23 @@
-//! Trames DDC/CI (VESA) pour le code VCP de luminosité : encodage et analyse,
-//! sans aucune E/S.
+//! DDC/CI (VESA) frames for the brightness VCP code: encoding and parsing,
+//! with no I/O at all.
 //!
-//! Format (à confirmer sur du matériel réel, voir `specs/VALIDATION_MATERIEL.md`) :
-//! - requête « Get VCP » envoyée à l'adresse esclave 0x37 :
-//!   `51 82 01 <vcp> <chk>` ;
-//! - requête « Set VCP » : `51 84 03 <vcp> <val_hi> <val_lo> <chk>` ;
-//!   dans les deux cas `chk = 0x6E ⊕ (tous les octets précédents)` ;
-//! - réponse « Get VCP » (11 octets) :
-//!   `6E 88 02 <résultat> <vcp> <type> <max_hi> <max_lo> <cur_hi> <cur_lo> <chk>`
-//!   avec `chk = 0x50 ⊕ (tous les octets précédents)` ;
-//! - « null message » : `6E 80 <chk>` (l'écran n'est pas prêt : échec transitoire).
+//! Format (to be confirmed on real hardware, see `specs/VALIDATION_MATERIEL.md`):
+//! - "Get VCP" request sent to slave address 0x37:
+//!   `51 82 01 <vcp> <chk>`;
+//! - "Set VCP" request: `51 84 03 <vcp> <val_hi> <val_lo> <chk>`;
+//!   in both cases `chk = 0x6E ⊕ (all preceding bytes)`;
+//! - "Get VCP" response (11 bytes):
+//!   `6E 88 02 <result> <vcp> <type> <max_hi> <max_lo> <cur_hi> <cur_lo> <chk>`
+//!   with `chk = 0x50 ⊕ (all preceding bytes)`;
+//! - "null message": `6E 80 <chk>` (the display is not ready: transient failure).
 
 use thiserror::Error;
 
-/// Adresse esclave I²C du canal DDC/CI.
+/// I²C slave address of the DDC/CI channel.
 pub const DDC_ADDRESS: u16 = 0x37;
-/// Code VCP de la luminosité.
+/// Brightness VCP code.
 pub const VCP_BRIGHTNESS: u8 = 0x10;
-/// Taille d'une réponse « Get VCP » complète.
+/// Size of a complete "Get VCP" response.
 pub const GET_VCP_REPLY_LEN: usize = 11;
 
 const HOST_ADDRESS: u8 = 0x51;
@@ -27,31 +27,31 @@ const OPCODE_GET_VCP: u8 = 0x01;
 const OPCODE_GET_VCP_REPLY: u8 = 0x02;
 const OPCODE_SET_VCP: u8 = 0x03;
 
-/// Erreurs d'analyse d'une réponse DDC/CI.
+/// Errors when parsing a DDC/CI response.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum DdcError {
-    /// Réponse trop courte pour être analysée.
+    /// Response too short to be parsed.
     #[error("DDC/CI response too short ({0} bytes)")]
     TooShort(usize),
-    /// L'écran répond « null message » : pas prêt, à réessayer.
+    /// The display answers "null message": not ready, retry.
     #[error("the display answers \"null message\" (not ready)")]
     NullMessage,
-    /// Somme de contrôle invalide.
+    /// Invalid checksum.
     #[error("invalid DDC/CI checksum")]
     BadChecksum,
-    /// Trame inattendue (adresse, longueur ou opcode).
+    /// Unexpected frame (address, length or opcode).
     #[error("trame DDC/CI inattendue")]
     UnexpectedFrame,
-    /// La réponse concerne un autre code VCP que celui demandé.
+    /// The response is for a different VCP code than the one requested.
     #[error("response for another VCP code (0x{0:02X})")]
     WrongVcp(u8),
-    /// L'écran ne prend pas en charge ce code VCP.
+    /// The display does not support this VCP code.
     #[error("VCP code not supported by the display")]
     UnsupportedVcp,
 }
 
 impl DdcError {
-    /// Vrai si une nouvelle tentative peut réussir (écran pas prêt, trame corrompue).
+    /// True if a new attempt may succeed (display not ready, corrupted frame).
     pub fn is_transient(self) -> bool {
         !matches!(self, Self::UnsupportedVcp)
     }
@@ -61,14 +61,14 @@ fn xor(seed: u8, bytes: &[u8]) -> u8 {
     bytes.iter().fold(seed, |acc, b| acc ^ b)
 }
 
-/// Requête « Get VCP » pour le code `vcp`.
+/// "Get VCP" request for VCP code `vcp`.
 pub fn encode_get_vcp(vcp: u8) -> [u8; 5] {
     let body = [HOST_ADDRESS, 0x82, OPCODE_GET_VCP, vcp];
     let checksum = xor(DISPLAY_WRITE_ADDRESS, &body);
     [body[0], body[1], body[2], body[3], checksum]
 }
 
-/// Requête « Set VCP » : écrit `value` (16 bits) dans le code `vcp`.
+/// "Set VCP" request: writes `value` (16 bits) to VCP code `vcp`.
 pub fn encode_set_vcp(vcp: u8, value: u16) -> [u8; 7] {
     let [hi, lo] = value.to_be_bytes();
     let body = [HOST_ADDRESS, 0x84, OPCODE_SET_VCP, vcp, hi, lo];
@@ -78,18 +78,18 @@ pub fn encode_set_vcp(vcp: u8, value: u16) -> [u8; 7] {
     ]
 }
 
-/// Valeur lue d'un code VCP.
+/// Value read from a VCP code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VcpReading {
-    /// Code VCP.
+    /// VCP code.
     pub vcp: u8,
-    /// Valeur courante.
+    /// Current value.
     pub current: u16,
-    /// Valeur maximale.
+    /// Maximum value.
     pub maximum: u16,
 }
 
-/// Analyse une réponse « Get VCP » attendue pour `expected_vcp`.
+/// Parses a "Get VCP" response expected for `expected_vcp`.
 pub fn parse_get_vcp_reply(reply: &[u8], expected_vcp: u8) -> Result<VcpReading, DdcError> {
     if reply.len() < 3 {
         return Err(DdcError::TooShort(reply.len()));
@@ -124,7 +124,7 @@ pub fn parse_get_vcp_reply(reply: &[u8], expected_vcp: u8) -> Result<VcpReading,
     })
 }
 
-/// Construit une réponse « Get VCP » valide (utile aux écrans factices et aux tests).
+/// Builds a valid "Get VCP" response (useful for fake displays and tests).
 pub fn encode_get_vcp_reply(vcp: u8, current: u16, maximum: u16) -> [u8; GET_VCP_REPLY_LEN] {
     let [mh, ml] = maximum.to_be_bytes();
     let [ch, cl] = current.to_be_bytes();
@@ -146,14 +146,14 @@ pub fn encode_get_vcp_reply(vcp: u8, current: u16, maximum: u16) -> [u8; GET_VCP
     frame
 }
 
-/// Construit un « null message » valide.
+/// Builds a valid "null message".
 pub fn encode_null_message() -> [u8; 3] {
     let body = [DISPLAY_WRITE_ADDRESS, 0x80];
     [body[0], body[1], xor(REPLY_CHECKSUM_SEED, &body)]
 }
 
-/// Décode une requête reçue par un écran (pour les écrans factices) : renvoie
-/// l'opcode, le code VCP et la valeur éventuelle, après vérification de la somme.
+/// Decodes a request received by a display (for fake displays): returns
+/// the opcode, the VCP code and the optional value, after checking the checksum.
 pub fn decode_request(frame: &[u8]) -> Option<(u8, u8, Option<u16>)> {
     if frame.len() < 5 || frame[0] != HOST_ADDRESS || frame[1] & 0x80 == 0 {
         return None;

@@ -1,6 +1,6 @@
 [package]
 name = "ha2lux-backends"
-description = "Backends matériels de ha2lux : DDC/CI, backlight, backend factice."
+description = "ha2lux hardware backends: DDC/CI, backlight, mock backend."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

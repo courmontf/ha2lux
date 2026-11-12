@@ -1,4 +1,4 @@
-//! Lecture REST contre un faux serveur local : T-HA-01..10 et garanties sur le jeton.
+//! REST read against a fake local server: T-HA-01..10 and token guarantees.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -152,7 +152,7 @@ async fn t_ha_08_a_response_over_256_kib_is_a_protocol_failure() {
         "annoncée par Content-Length"
     );
 
-    // Sans Content-Length : la limite s'applique en cours de lecture.
+    // Without Content-Length: the limit applies while reading.
     let big = "y".repeat(300 * 1024);
     let streamed = format!(r#"{{"state":"1","pad":"{big}"}}"#);
     let server = http_server(move |_, _| Reply {
@@ -212,7 +212,7 @@ async fn t_ha_10_an_invalid_certificate_is_refused_without_any_bypass() {
 
 #[tokio::test]
 async fn connection_refused_and_server_errors_are_classified() {
-    // Un port réservé puis libéré : personne n'écoute, la connexion est refusée.
+    // A port reserved then released: nobody is listening, the connection is refused.
     let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", free.local_addr().unwrap());
     drop(free);

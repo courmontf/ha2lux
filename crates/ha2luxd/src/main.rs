@@ -1,7 +1,7 @@
-//! Binaire `ha2luxd` : démon utilisateur ha2lux.
+//! `ha2luxd` binary: ha2lux user daemon.
 //!
-//! Il remplace proprement une instance déjà en cours (voir `service`), écoute
-//! sur le bus de session et s'arrête sur SIGTERM/SIGINT ou sur `Quit`.
+//! It cleanly replaces an already running instance (see `service`), listens
+//! on the session bus and stops on SIGTERM/SIGINT or on `Quit`.
 #![forbid(unsafe_code)]
 
 use std::process::ExitCode;
@@ -20,7 +20,7 @@ fn init_logging() {
     let builder = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr);
-    // Sous systemd, journald ajoute lui-même l'horodatage et n'aime pas les couleurs.
+    // Under systemd, journald adds the timestamp itself and dislikes colors.
     if std::env::var_os("JOURNAL_STREAM").is_some() {
         builder.without_time().with_ansi(false).init();
     } else {
@@ -34,7 +34,7 @@ async fn shutdown_signal() {
         signal(SignalKind::terminate()),
         signal(SignalKind::interrupt()),
     ) else {
-        // Sans gestionnaire de signaux, on attend indéfiniment : l'arrêt passera par `Quit`.
+        // Without a signal handler, wait indefinitely: shutdown will go through `Quit`.
         std::future::pending::<()>().await;
         return;
     };
@@ -46,7 +46,7 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    // Langue du fichier de configuration, avant d'afficher quoi que ce soit.
+    // Language of the configuration file, before displaying anything.
     ha2lux_i18n::config::init_from_config();
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {

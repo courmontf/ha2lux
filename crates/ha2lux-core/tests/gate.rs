@@ -1,4 +1,4 @@
-//! T-GAT : porte d'hystérésis (spec §8.5).
+//! T-GAT: hysteresis gate (spec §8.5).
 use ha2lux_core::{Gate, GateParams};
 
 fn gate_at(last: u8) -> Gate {
@@ -59,7 +59,7 @@ fn t_gat_08_reset() {
 
 #[test]
 fn t_gat_09_insufficient_resets_counter() {
-    // 54 compte 1, 55 (écart 1 < 3) remet à zéro, puis il faut de nouveau 3.
+    // 54 counts 1, 55 (gap 1 < 3) resets to zero, then 3 are needed again.
     let mut g = gate_at(50);
     assert_eq!(
         run(&mut g, &[54, 54, 51, 54, 54]),

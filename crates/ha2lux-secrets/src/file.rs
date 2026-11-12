@@ -1,5 +1,5 @@
-//! Repli : fichier JSON `{ "hôte:port": "jeton" }` de permissions 0600, écriture atomique.
-//! Refusé en lecture si d'autres utilisateurs peuvent le lire.
+//! Fallback: JSON file `{ "hôte:port": "jeton" }` with 0600 permissions, atomic write.
+//! Rejected on read if other users can read it.
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -8,13 +8,13 @@ use std::path::{Path, PathBuf};
 
 use crate::{SecretError, SecretStore, Stored};
 
-/// Magasin de jetons dans un fichier.
+/// Token store in a file.
 pub struct FileSecretStore {
     path: PathBuf,
 }
 
 impl FileSecretStore {
-    /// Magasin dans `path` (par exemple `~/.config/ha2lux/secrets.json`).
+    /// Store at `path` (for example `~/.config/ha2lux/secrets.json`).
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
@@ -30,7 +30,7 @@ impl FileSecretStore {
         }
         let text = std::fs::read_to_string(path)
             .map_err(|e| SecretError::Other(format!("{} : {e}", path.display())))?;
-        // Le contenu n'est jamais recopié dans l'erreur : il contient des jetons.
+        // The content is never copied into the error: it contains tokens.
         serde_json::from_str(&text)
             .map_err(|_| SecretError::Other(format!("{} : format illisible", path.display())))
     }
@@ -46,7 +46,7 @@ impl FileSecretStore {
         let body =
             serde_json::to_string_pretty(secrets).map_err(|e| SecretError::Other(e.to_string()))?;
         let result = (|| {
-            // 0600 dès la création : le contenu n'est jamais lisible par un autre utilisateur.
+            // 0600 from creation: the content is never readable by another user.
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -57,7 +57,7 @@ impl FileSecretStore {
             std::fs::rename(&temp, path)
         })();
         if result.is_err() {
-            // Meilleur effort : le temporaire peut déjà avoir disparu.
+            // Best effort: the temporary file may already be gone.
             let _ = std::fs::remove_file(&temp);
         }
         result.map_err(fail)

@@ -1,11 +1,11 @@
-//! Stockage du jeton Home Assistant (spec §8.2) : **trousseau du bureau** (Secret Service,
-//! par D-Bus) avec **repli sur un fichier de permissions 0600**.
+//! Home Assistant token storage (spec §8.2): **desktop keyring** (Secret Service,
+//! over D-Bus) with **fallback to a file with 0600 permissions**.
 //!
-//! Le jeton est rangé sous la clé `hôte:port` du serveur ([`ha2lux_core::url::authority_key`]) :
-//! si l'adresse de Home Assistant change d'hôte, le jeton de l'ancien serveur n'est **jamais**
-//! retrouvé, donc jamais présenté au nouveau (T-SEC-04) ; l'utilisateur doit le ressaisir.
+//! The token is stored under the server's `host:port` key ([`ha2lux_core::url::authority_key`]):
+//! if the Home Assistant address changes host, the old server's token is **never**
+//! found, hence never presented to the new one (T-SEC-04); the user must re-enter it.
 //!
-//! Aucune fonction de ce module n'écrit un jeton dans un journal ou un message d'erreur.
+//! No function of this module writes a token to a log or an error message.
 #![forbid(unsafe_code)]
 
 pub mod file;
@@ -18,26 +18,26 @@ use thiserror::Error;
 pub use file::FileSecretStore;
 pub use service::ServiceSecretStore;
 
-/// Échec d'un accès aux secrets. Les messages ne contiennent jamais le jeton.
+/// Failure of a secrets access. Messages never contain the token.
 #[derive(Debug, Error)]
 pub enum SecretError {
-    /// Pas de trousseau joignable (service absent, bus indisponible).
+    /// No reachable keyring (service absent, bus unavailable).
     #[error("keyring unavailable: {0}")]
     Unavailable(String),
-    /// Le trousseau est verrouillé et l'utilisateur n'a pas accepté de le déverrouiller.
+    /// The keyring is locked and the user did not agree to unlock it.
     #[error("keyring locked: unlock refused or timed out")]
     Locked,
-    /// Fichier de secrets lisible par d'autres utilisateurs.
+    /// Secrets file readable by other users.
     #[error("{0}: permissions too open (0600 expected), file ignored")]
     TooOpen(String),
-    /// Autre erreur d'entrée/sortie ou de format.
+    /// Other I/O or format error.
     #[error("{0}")]
     Other(String),
 }
 
 impl SecretError {
-    /// Message localisable pour un client (clé de catalogue + arguments) ; voir
-    /// [`ha2lux_i18n::wire`]. Le `Display` reste le texte pour les journaux.
+    /// Localizable message for a client (catalog key + arguments); see
+    /// [`ha2lux_i18n::wire`]. `Display` remains the text for logs.
     pub fn to_wire(&self) -> String {
         use ha2lux_i18n::wire::encode;
         match self {
@@ -49,40 +49,40 @@ impl SecretError {
     }
 }
 
-/// Où un secret a été rangé.
+/// Where a secret was stored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stored {
-    /// Trousseau du bureau.
+    /// Desktop keyring.
     Keyring,
-    /// Fichier de repli (0600).
+    /// Fallback file (0600).
     File,
 }
 
-/// Magasin de jetons, indexé par la clé `hôte:port` du serveur.
+/// Token store, indexed by the server's `host:port` key.
 pub trait SecretStore: Send + Sync {
-    /// Jeton enregistré pour ce serveur, s'il existe.
+    /// Token stored for this server, if any.
     fn get(
         &self,
         host_key: &str,
     ) -> impl Future<Output = Result<Option<String>, SecretError>> + Send;
-    /// Enregistre (ou remplace) le jeton de ce serveur.
+    /// Stores (or replaces) this server's token.
     fn set(
         &self,
         host_key: &str,
         token: &str,
     ) -> impl Future<Output = Result<Stored, SecretError>> + Send;
-    /// Supprime le jeton de ce serveur. Renvoie `true` s'il existait.
+    /// Deletes this server's token. Returns `true` if it existed.
     fn delete(&self, host_key: &str) -> impl Future<Output = Result<bool, SecretError>> + Send;
 }
 
-/// Trousseau d'abord, fichier en repli.
+/// Keyring first, file as fallback.
 pub struct ChainStore {
     keyring: Option<ServiceSecretStore>,
     file: FileSecretStore,
 }
 
 impl ChainStore {
-    /// Chaîne un trousseau (s'il est joignable) et un fichier de repli.
+    /// Chains a keyring (if reachable) and a fallback file.
     pub fn new(keyring: Option<ServiceSecretStore>, file: FileSecretStore) -> Self {
         Self { keyring, file }
     }
@@ -106,7 +106,7 @@ impl SecretStore for ChainStore {
         if let Some(keyring) = &self.keyring {
             match keyring.set(host_key, token).await {
                 Ok(stored) => {
-                    // Un ancien exemplaire dans le fichier n'a plus lieu d'être.
+                    // An old copy in the file is no longer needed.
                     if let Err(error) = self.file.delete(host_key).await {
                         tracing::debug!(%error, "old token in the file not removed");
                     }

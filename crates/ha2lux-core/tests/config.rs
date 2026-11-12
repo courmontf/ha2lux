@@ -1,4 +1,4 @@
-//! T-CFG (partie pure) : lecture tolérante et sérialisation (spec §10).
+//! T-CFG (pure part): tolerant reading and serialization (spec §10).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::config::{Config, ConfigError, Severity, is_valid_entity_id};
 
@@ -303,7 +303,7 @@ fn language_defaults_to_auto_and_is_normalized() {
         load("[general]\nlanguage = \"fr\"").0.general.language,
         "fr"
     );
-    // Casse et espaces tolérés ; `pt-br` est un code valide.
+    // Case and whitespace tolerated; `pt-br` is a valid code.
     assert_eq!(
         load("[general]\nlanguage = \" EN \"").0.general.language,
         "en"
@@ -336,7 +336,7 @@ fn invalid_language_falls_back_to_auto_with_a_warning() {
             "{bad} : {issues:?}"
         );
     }
-    // Mauvais type : signalé aussi.
+    // Wrong type: also reported.
     let (config, issues) = load("[general]\nlanguage = 3");
     assert_eq!(config.general.language, "auto");
     assert!(issues.iter().any(|(path, _)| path == "general.language"));

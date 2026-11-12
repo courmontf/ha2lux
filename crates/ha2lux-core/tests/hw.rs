@@ -1,4 +1,4 @@
-//! T-HW : normalisation matérielle (spec §4.4).
+//! T-HW: hardware normalization (spec §4.4).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::hw::{
     HwError, backlight_raw_from_level, ensure_controllable, level_from_raw, raw_from_level,

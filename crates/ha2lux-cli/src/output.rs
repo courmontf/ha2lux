@@ -1,4 +1,4 @@
-//! Rendu des réponses du démon, en texte lisible ou en JSON (fonctions pures).
+//! Rendering of daemon responses, as readable text or JSON (pure functions).
 
 use ha2lux_i18n::t;
 use ha2lux_ipc::DisplayDto;
@@ -36,7 +36,7 @@ fn level_label(level: i32) -> String {
     }
 }
 
-/// Une ligne d'écran, numérotée à partir de 1.
+/// A display line, numbered from 1.
 pub fn display_line(number: usize, d: &DisplayDto) -> String {
     t!(
         "cli-display-line",
@@ -62,7 +62,7 @@ pub fn render_list(list: &[DisplayDto]) -> String {
         .collect()
 }
 
-/// `ha2lux get` (sans `--display`).
+/// `ha2lux get` (without `--display`).
 pub fn render_get(status: &StatusInfo, list: &[DisplayDto]) -> String {
     let master = status.master.map_or_else(|| t!("cli-unknown"), percent);
     let mut out = t!(
@@ -167,7 +167,7 @@ pub fn render_auto(status: &StatusInfo) -> String {
     text
 }
 
-/// Résumé de l'état du lien en une expression : inactif, connexion, actif, etc.
+/// Summary of the link state in one phrase: inactive, connecting, active, etc.
 fn auto_state(status: &StatusInfo) -> String {
     if !status.auto_enabled {
         return t!("cli-auto-state-inactive");
@@ -188,7 +188,7 @@ fn auto_state(status: &StatusInfo) -> String {
     }
 }
 
-/// Liste des capteurs d'éclairement.
+/// List of illuminance sensors.
 pub fn render_sensors(list: &[(String, String, String)]) -> String {
     if list.is_empty() {
         return t!("cli-sensors-none") + "\n";
@@ -204,7 +204,7 @@ pub fn render_sensors(list: &[(String, String, String)]) -> String {
     text
 }
 
-/// Phrase de confirmation d'un interrupteur.
+/// Confirmation sentence of a switch.
 pub fn toggle_message(feature: &str, on: bool, status: &StatusInfo) -> String {
     let text = match feature {
         "schedule" if on => t!("cli-toggle-schedule-on"),
@@ -221,48 +221,48 @@ pub fn toggle_message(feature: &str, on: bool, status: &StatusInfo) -> String {
     text + "\n"
 }
 
-/// Sortie JSON de `get`.
+/// JSON output of `get`.
 #[derive(Serialize)]
 pub struct GetJson<'a> {
-    /// Niveau maître.
+    /// Master level.
     pub master: Option<u8>,
-    /// Source de base.
+    /// Base source.
     pub mode: &'a str,
-    /// Écrans.
+    /// Displays.
     pub displays: &'a [DisplayDto],
 }
 
-/// Sortie JSON de `auto status`.
+/// JSON output of `auto status`.
 #[derive(Serialize)]
 pub struct AutoJson<'a> {
-    /// Activée.
+    /// Enabled.
     pub enabled: bool,
-    /// Configurée.
+    /// Configured.
     pub configured: bool,
-    /// Santé Home Assistant.
+    /// Home Assistant health.
     pub health: &'a str,
-    /// Source de base.
+    /// Base source.
     pub mode: &'a str,
-    /// Un jeton est enregistré.
+    /// A token is stored.
     pub token_present: bool,
-    /// Jeton refusé.
+    /// Token rejected.
     pub auth_rejected: bool,
-    /// Flux WebSocket actif.
+    /// WebSocket stream active.
     pub websocket: bool,
-    /// Valeur brute du capteur.
+    /// Raw sensor value.
     pub raw: Option<&'a str>,
-    /// Lux lissé.
+    /// Smoothed lux.
     pub lux_smoothed: Option<f64>,
-    /// Dernier lux.
+    /// Last lux.
     pub lux_latest: Option<f64>,
-    /// Ajustement en cours.
+    /// Adjustment in progress.
     pub adjusting: bool,
-    /// Niveau visé.
+    /// Target level.
     pub target: Option<u8>,
-    /// Niveau appliqué.
+    /// Applied level.
     pub level: Option<u8>,
-    /// Courbe (lux, niveau).
+    /// Curve (lux, level).
     pub curve: &'a [(f64, u8)],
-    /// Courbe par défaut.
+    /// Default curve.
     pub curve_default: bool,
 }

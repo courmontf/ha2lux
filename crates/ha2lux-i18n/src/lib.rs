@@ -1,42 +1,42 @@
-//! Internationalisation de ha2lux.
+//! Internationalization of ha2lux.
 //!
-//! Les textes visibles par l'utilisateur vivent dans des catalogues
-//! [Fluent](https://projectfluent.org) (`locales/<langue>/*.ftl`) embarqués dans
-//! le binaire. La langue est choisie une fois par processus, d'après
-//! l'environnement (voir [`detect`]) ; une clé absente d'une langue retombe sur
-//! la langue de repli [`FALLBACK_LANG`].
+//! User-visible texts live in [Fluent](https://projectfluent.org)
+//! catalogs (`locales/<language>/*.ftl`) embedded in
+//! the binary. The language is chosen once per process, based on
+//! the environment (see [`detect`]); a key missing from a language falls back to
+//! the fallback language [`FALLBACK_LANG`].
 //!
 //! ```
 //! let texte = ha2lux_i18n::t!("i18n-self-test", name = "monde");
 //! assert!(texte.contains("monde"));
 //! ```
 //!
-//! Les journaux (`tracing`) et les identifiants D-Bus ne sont **pas** traduits.
+//! Logs (`tracing`) and D-Bus identifiers are **not** translated.
 //!
-//! # Où vivent les textes
+//! # Where the texts live
 //!
-//! - `locales/<langue>/cli.ftl` : CLI `ha2lux` (sortie, erreurs, aide) ;
-//! - `locales/<langue>/tray.ftl` : icône de zone de notification ;
-//! - `locales/<langue>/daemon.ftl` : messages du démon, envoyés aux clients sous
-//!   forme de clé + arguments (voir [`wire`]) et traduits par le client ;
-//! - `locales/<langue>/doctor.ftl` : rapport `ha2lux doctor`.
+//! - `locales/<language>/cli.ftl`: `ha2lux` CLI (output, errors, help);
+//! - `locales/<language>/tray.ftl`: notification area icon;
+//! - `locales/<language>/daemon.ftl`: daemon messages, sent to clients as
+//!   key + arguments (see [`wire`]) and translated by the client;
+//! - `locales/<language>/doctor.ftl`: `ha2lux doctor` report.
 //!
-//! # Ajouter une langue (ex. `en`)
+//! # Adding a language (e.g. `en`)
 //!
-//! 1. Créer `locales/en/` avec les mêmes fichiers `.ftl` que `locales/fr/`
-//!    (mêmes clés, mêmes `$variables`) ;
-//! 2. les déclarer dans `CATALOGS` (`src/lib.rs`) ;
-//! 3. `cargo test -p ha2lux-i18n` vérifie que chaque fichier est embarqué et que
-//!    la nouvelle langue définit exactement les clés de `fr` ;
-//! 4. essayer : `HA2LUX_LANG=en ha2lux --help`.
+//! 1. Create `locales/en/` with the same `.ftl` files as `locales/fr/`
+//!    (same keys, same `$variables`);
+//! 2. declare them in `CATALOGS` (`src/lib.rs`);
+//! 3. `cargo test -p ha2lux-i18n` checks that every file is embedded and that
+//!    the new language defines exactly the keys of `fr`;
+//! 4. try it: `HA2LUX_LANG=en ha2lux --help`.
 //!
-//! # Écrire du code qui affiche du texte
+//! # Writing code that displays text
 //!
-//! Jamais de phrase en dur : `t!("cli-list-empty")`, ou avec des variables
-//! `t!("cli-display-level", name = nom, number = n, level = niveau)`. Pas de
-//! retour à la ligne final dans les messages (le code l'ajoute), et les nombres
-//! dont le format compte (`{:.0}`, `{:04X}`) se passent déjà formatés. Un test
-//! vérifie que toute clé citée dans le code existe dans le catalogue.
+//! Never hard-code a sentence: `t!("cli-list-empty")`, or with variables
+//! `t!("cli-display-level", name = nom, number = n, level = niveau)`. No
+//! trailing newline in messages (the code adds it), and numbers
+//! whose format matters (`{:.0}`, `{:04X}`) are passed already formatted. A test
+//! checks that every key cited in the code exists in the catalog.
 #![forbid(unsafe_code)]
 
 pub mod config;
@@ -50,21 +50,21 @@ use fluent_bundle::{FluentResource, FluentValue};
 
 use unic_langid::LanguageIdentifier;
 
-/// Langue utilisée quand l'environnement n'en désigne aucune de disponible, et
-/// pour les clés qu'une traduction n'a pas encore.
+/// Language used when the environment designates none that is available, and
+/// for keys a translation does not have yet.
 pub const FALLBACK_LANG: &str = "en";
 
-/// Variable d'environnement qui impose la langue (prioritaire sur `LANG`).
+/// Environment variable that forces the language (takes priority over `LANG`).
 pub const LANG_ENV: &str = "HA2LUX_LANG";
 
-/// Une langue disponible et ses fichiers `.ftl`.
+/// An available language and its `.ftl` files.
 struct Catalog {
     lang: &'static str,
     files: &'static [(&'static str, &'static str)],
 }
 
-/// Catalogues embarqués. Toute nouvelle langue ou tout nouveau fichier s'ajoute
-/// ici ; le test `catalogs_cover_locales_dir` détecte un oubli.
+/// Embedded catalogs. Any new language or file is added
+/// here; the `catalogs_cover_locales_dir` test detects an omission.
 const CATALOGS: &[Catalog] = &[
     Catalog {
         lang: "en",
@@ -88,13 +88,13 @@ const CATALOGS: &[Catalog] = &[
     },
 ];
 
-/// Langues disponibles, dans l'ordre de déclaration.
+/// Available languages, in declaration order.
 pub fn available() -> Vec<&'static str> {
     CATALOGS.iter().map(|c| c.lang).collect()
 }
 
-/// Ramène une valeur d'environnement (`fr_FR.UTF-8@euro`, `en-GB`, `C`…) au code
-/// de langue seul (`fr`, `en`), ou `None` pour `C`/`POSIX`/vide.
+/// Reduces an environment value (`fr_FR.UTF-8@euro`, `en-GB`, `C`…) to the bare
+/// language code (`fr`, `en`), or `None` for `C`/`POSIX`/empty.
 fn language_code(value: &str) -> Option<String> {
     let base = value
         .split(['.', '@'])
@@ -111,18 +111,18 @@ fn language_code(value: &str) -> Option<String> {
     }
 }
 
-/// Choisit la langue d'après l'environnement fourni par `var`.
+/// Picks the language from the environment provided by `var`.
 ///
-/// Ordre : `HA2LUX_LANG`, `LANGUAGE` (liste séparée par `:`), `LC_ALL`,
-/// `LC_MESSAGES`, `LANG`. Le premier code reconnu parmi [`available`] gagne ;
-/// sinon [`FALLBACK_LANG`].
+/// Order: `HA2LUX_LANG`, `LANGUAGE` (`:`-separated list), `LC_ALL`,
+/// `LC_MESSAGES`, `LANG`. The first code recognized among [`available`] wins;
+/// otherwise [`FALLBACK_LANG`].
 pub fn detect(var: impl Fn(&str) -> Option<String>) -> &'static str {
     detect_with(None, var)
 }
 
-/// Comme [`detect`], avec la langue du fichier de configuration (`preferred`) :
-/// elle passe après `HA2LUX_LANG` mais avant les variables de la session. `auto`
-/// (ou `None`) revient à ne pas en avoir. Une langue inconnue est ignorée.
+/// Like [`detect`], with the configuration file's language (`preferred`):
+/// it comes after `HA2LUX_LANG` but before the session variables. `auto`
+/// (or `None`) is the same as having none. An unknown language is ignored.
 pub fn detect_with(preferred: Option<&str>, var: impl Fn(&str) -> Option<String>) -> &'static str {
     let mut candidates: Vec<String> = Vec::new();
     candidates.extend(var(LANG_ENV));
@@ -146,8 +146,8 @@ pub fn detect_with(preferred: Option<&str>, var: impl Fn(&str) -> Option<String>
     FALLBACK_LANG
 }
 
-/// Langue du processus : celle du fichier de configuration (`preferred`) et le
-/// localisateur qui en résulte, construit au premier besoin.
+/// Process language: the configuration file's (`preferred`) and the
+/// resulting localizer, built on first use.
 struct Language {
     preferred: Option<String>,
     current: Option<Arc<Localizer>>,
@@ -159,14 +159,14 @@ static LANGUAGE: Mutex<Language> = Mutex::new(Language {
 });
 
 fn language() -> MutexGuard<'static, Language> {
-    // Un verrou empoisonné ne rend pas les données invalides : on continue.
+    // A poisoned lock does not make the data invalid: carry on.
     LANGUAGE.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Fixe la langue du fichier de configuration (`auto` : celle de la session).
-/// Peut être rappelée à tout moment (rechargement de la configuration) : les
-/// prochains textes sont alors traduits dans la nouvelle langue. Renvoie `true` si
-/// la langue effective a changé.
+/// Sets the configuration file's language (`auto`: the session's).
+/// May be called again at any time (configuration reload): the
+/// next texts are then translated into the new language. Returns `true` if
+/// the effective language changed.
 pub fn set_preferred(lang: &str) -> bool {
     let before = current().lang();
     let mut state = language();
@@ -176,7 +176,7 @@ pub fn set_preferred(lang: &str) -> bool {
     current().lang() != before
 }
 
-/// Les messages d'une langue, avec repli sur [`FALLBACK_LANG`].
+/// The messages of a language, with fallback to [`FALLBACK_LANG`].
 pub struct Localizer {
     lang: &'static str,
     primary: FluentBundle<FluentResource>,
@@ -189,7 +189,7 @@ fn build_bundle(catalog: &Catalog) -> Result<FluentBundle<FluentResource>, Strin
         .parse()
         .map_err(|e| format!("langue « {} » invalide : {e}", catalog.lang))?;
     let mut bundle = FluentBundle::new_concurrent(vec![id]);
-    // Pas de marques d'isolation Unicode : elles polluent la sortie du terminal.
+    // No Unicode isolation marks: they pollute the terminal output.
     bundle.set_use_isolating(false);
     for (name, source) in catalog.files {
         let resource = FluentResource::try_new((*source).to_owned())
@@ -202,8 +202,8 @@ fn build_bundle(catalog: &Catalog) -> Result<FluentBundle<FluentResource>, Strin
 }
 
 impl Localizer {
-    /// Charge `lang` (repli : [`FALLBACK_LANG`]). Erreur si un catalogue est
-    /// mal formé ou contient un identifiant en double — vérifié par les tests.
+    /// Loads `lang` (fallback: [`FALLBACK_LANG`]). Error if a catalog is
+    /// malformed or contains a duplicate identifier — checked by the tests.
     pub fn try_new(lang: &str) -> Result<Self, String> {
         Self::with_catalogs(CATALOGS, lang)
     }
@@ -230,12 +230,12 @@ impl Localizer {
         })
     }
 
-    /// Langue effectivement utilisée.
+    /// Language actually used.
     pub fn lang(&self) -> &'static str {
         self.lang
     }
 
-    /// Texte de `key`, ou `key` lui-même s'il n'existe dans aucune langue.
+    /// Text of `key`, or `key` itself if it exists in no language.
     pub fn translate(&self, key: &str, args: Option<&FluentArgs<'_>>) -> String {
         for bundle in std::iter::once(&self.primary).chain(self.fallback.as_ref()) {
             let Some(message) = bundle.get_message(key) else {
@@ -253,8 +253,8 @@ impl Localizer {
     }
 }
 
-/// Le localisateur du processus, construit au premier appel d'après la configuration
-/// puis l'environnement. Le résultat reste valable même si la langue change ensuite.
+/// The process's localizer, built on first call from the configuration
+/// then the environment. The result stays valid even if the language changes later.
 pub fn current() -> Arc<Localizer> {
     let mut state = language();
     if let Some(localizer) = &state.current {
@@ -263,8 +263,8 @@ pub fn current() -> Arc<Localizer> {
     let lang = detect_with(state.preferred.as_deref(), |name| std::env::var(name).ok());
     let localizer = Arc::new(match Localizer::try_new(lang) {
         Ok(localizer) => localizer,
-        // Catalogue embarqué invalide : impossible en pratique (testé).
-        // On reste utilisable : les clés s'affichent telles quelles.
+        // Invalid embedded catalog: impossible in practice (tested).
+        // We stay usable: keys are displayed as-is.
         Err(_) => Localizer {
             lang: FALLBACK_LANG,
             primary: FluentBundle::new_concurrent(Vec::new()),
@@ -275,19 +275,19 @@ pub fn current() -> Arc<Localizer> {
     localizer
 }
 
-/// Traduit `key` dans la langue du processus (voir aussi la macro [`t!`]).
+/// Translates `key` into the process language (see also the [`t!`] macro).
 pub fn translate(key: &str, args: Option<&FluentArgs<'_>>) -> String {
     current().translate(key, args)
 }
 
-/// Convertit une valeur en argument Fluent (réexport pour la macro).
+/// Converts a value into a Fluent argument (re-export for the macro).
 pub fn arg<'a>(value: impl Into<FluentValue<'a>>) -> FluentValue<'a> {
     value.into()
 }
 
-/// `t!("clé")` ou `t!("clé", nom = valeur, …)` : texte localisé.
+/// `t!("key")` or `t!("key", name = value, …)`: localized text.
 ///
-/// Les noms d'arguments correspondent aux variables `{ $nom }` du catalogue.
+/// Argument names match the catalog's `{ $name }` variables.
 #[macro_export]
 macro_rules! t {
     ($key:expr) => {
@@ -332,20 +332,20 @@ mod tests {
         assert_eq!(detect(env(&[("LANG", "C.UTF-8")])), FALLBACK_LANG);
         assert_eq!(detect(env(&[("LANG", "zz_ZZ.UTF-8")])), FALLBACK_LANG);
         assert_eq!(detect(env(&[("LANG", "fr_FR.UTF-8")])), "fr");
-        // Une valeur inconnue est ignorée au profit de la suivante.
+        // An unknown value is ignored in favor of the next one.
         assert_eq!(detect(env(&[("LANGUAGE", "zz:fr"), ("LANG", "zz")])), "fr");
         assert_eq!(detect(env(&[(LANG_ENV, "fr"), ("LC_ALL", "zz")])), "fr");
     }
 
     #[test]
     fn detect_with_puts_the_config_between_the_override_and_the_session() {
-        // Le fichier de configuration l'emporte sur la session...
+        // The configuration file wins over the session...
         let session = [("LANG", "en_US.UTF-8")];
         assert_eq!(detect_with(Some("fr"), env(&session)), "fr");
-        // ... mais pas sur HA2LUX_LANG.
+        // ... but not over HA2LUX_LANG.
         let forced = [(LANG_ENV, "en"), ("LANG", "fr_FR.UTF-8")];
         assert_eq!(detect_with(Some("fr"), env(&forced)), "en");
-        // `auto`, l'absence de valeur et une langue inconnue laissent la session décider.
+        // `auto`, a missing value and an unknown language let the session decide.
         let fr_session = [("LANG", "fr_FR.UTF-8")];
         for ignored in [Some("auto"), Some("AUTO"), None, Some("zz")] {
             assert_eq!(detect_with(ignored, env(&fr_session)), "fr", "{ignored:?}");
@@ -374,7 +374,7 @@ mod tests {
         assert_eq!(fr.translate("cle-inexistante", None), "cle-inexistante");
     }
 
-    /// Chaque `.ftl` du dossier `locales/` doit être embarqué, et inversement.
+    /// Every `.ftl` in the `locales/` folder must be embedded, and vice versa.
     #[test]
     fn catalogs_cover_locales_dir() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("locales");
@@ -405,8 +405,8 @@ mod tests {
         );
     }
 
-    /// Une langue partielle : ses clés l'emportent, les autres retombent sur la
-    /// langue de repli, et les pluriels suivent les règles de la langue.
+    /// A partial language: its keys win, the others fall back to the
+    /// fallback language, and plurals follow the language's rules.
     #[test]
     fn a_partial_language_falls_back_key_by_key_and_handles_plurals() {
         const CATALOGS_TEST: &[Catalog] = &[
@@ -427,20 +427,20 @@ mod tests {
         assert_eq!(fr.translate("both", None), "français");
         assert_eq!(fr.translate("only-en", None), "english only");
         assert_eq!(fr.translate("absent", None), "absent");
-        // En français, 0 et 1 sont au singulier.
+        // In French, 0 and 1 are singular.
         for (n, expected) in [(0, "0 écran"), (1, "1 écran"), (3, "3 écrans")] {
             let mut args = FluentArgs::new();
             args.set("n", arg(n));
             assert_eq!(fr.translate("displays", Some(&args)), expected);
         }
-        // Langue inconnue : retombe sur la langue de repli.
+        // Unknown language: falls back to the fallback language.
         let unknown = Localizer::with_catalogs(CATALOGS_TEST, "de").expect("repli");
         assert_eq!(unknown.lang(), FALLBACK_LANG);
         assert_eq!(unknown.translate("both", None), "english");
     }
 
-    /// Chaque clé citée dans le code (`t!("…")`, `encode("…")`) existe dans le
-    /// catalogue de repli : une faute de frappe ne passerait sinon pas inaperçue.
+    /// Every key cited in the code (`t!("…")`, `encode("…")`) exists in the
+    /// fallback catalog: otherwise a typo would not go unnoticed.
     #[test]
     fn every_key_used_in_code_exists() {
         fn rust_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
@@ -502,15 +502,15 @@ mod tests {
             unknown.is_empty(),
             "clés absentes du catalogue : {unknown:#?}"
         );
-        // Garde-fou contre un balayage qui ne verrait plus rien (motif cassé).
+        // Safeguard against a scan that would no longer see anything (broken pattern).
         assert!(
             checked >= 150,
             "le balayage ne voit que {checked} clés : motif cassé ?"
         );
     }
 
-    /// Toute langue doit définir exactement les mêmes clés que la langue de repli
-    /// (sinon des textes resteraient non traduits sans qu'on le voie).
+    /// Every language must define exactly the same keys as the fallback language
+    /// (otherwise some texts would remain untranslated unnoticed).
     #[test]
     fn every_language_has_the_fallback_keys() {
         fn keys(catalog: &Catalog) -> BTreeSet<String> {

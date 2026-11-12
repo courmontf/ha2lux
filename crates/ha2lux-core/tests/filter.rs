@@ -1,4 +1,4 @@
-//! T-FLT : lissage (spec §8.5) et simulations T-FLT-13/14.
+//! T-FLT: smoothing (spec §8.5) and simulations T-FLT-13/14.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{Curve, Filter, FilterParams, Gate, GateParams};
 
@@ -121,7 +121,7 @@ fn reset_forgets_everything() {
     assert!(!f.has_value() && !f.is_pending());
 }
 
-/// PRNG xorshift : la reproductibilité suffit, les graines ne sont pas sacrées.
+/// xorshift PRNG: reproducibility is enough, the seeds are not sacred.
 struct Rng(u64);
 impl Rng {
     fn next_f64(&mut self) -> f64 {
@@ -132,7 +132,7 @@ impl Rng {
     }
 }
 
-/// Simule `polls` sondages et renvoie la suite des niveaux appliqués.
+/// Simulates `polls` polls and returns the sequence of applied levels.
 fn simulate(polls: usize, mut noise: impl FnMut(&mut Rng) -> f64) -> Vec<u8> {
     let (curve, mut filter, mut gate) = (
         Curve::new(),
@@ -177,8 +177,8 @@ fn t_flt_14_no_big_jump_with_small_noise() {
 
 #[test]
 fn lamp_is_followed_quickly() {
-    // Lampe 8 → 77 lx, sondages à 15 s : suivie en au plus 2 sondages (≈ 30 s,
-    // ou ≈ 18 s avec le sondage de confirmation rapproché).
+    // Lamp 8 → 77 lx, polls every 15 s: tracked in at most 2 polls (≈ 30 s,
+    // or ≈ 18 s with the closer confirmation poll).
     let mut f = Filter::new(FilterParams::default());
     f.push(8.0);
     f.push(77.0);

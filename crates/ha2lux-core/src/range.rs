@@ -1,19 +1,19 @@
-//! Niveau maître, plage par écran et conversions (spec §4.1-4.3).
+//! Master level, per-display range and conversions (spec §4.1-4.3).
 
-/// Largeur minimale d'une plage (`haut - bas`).
+/// Minimum width of a range (`high - low`).
 pub const MIN_RANGE_WIDTH: u8 = 20;
 
-/// Ramène un entier quelconque dans `0..=100`.
+/// Clamps any integer into `0..=100`.
 pub fn clamp_percent(value: i64) -> u8 {
-    // Après `clamp`, la valeur tient dans un `u8`.
+    // After `clamp`, the value fits in a `u8`.
     value.clamp(0, 100) as u8
 }
 
-/// Plage `(bas, haut)` d'un écran : niveaux réels de l'écran quand le maître
-/// vaut 0 et 100.
+/// `(low, high)` range of a display: the display's actual levels when the master
+/// is 0 and 100.
 ///
-/// Invariants garantis par construction : `haut ∈ [20, 100]` et
-/// `bas ∈ [0, haut − 20]`.
+/// Invariants guaranteed by construction: `high ∈ [20, 100]` and
+/// `low ∈ [0, high − 20]`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Range {
     low: u8,
@@ -27,11 +27,11 @@ impl Default for Range {
 }
 
 impl Range {
-    /// Plage par défaut d'un écran nouveau : `(0, 100)`.
+    /// Default range of a new display: `(0, 100)`.
     pub const FULL: Range = Range { low: 0, high: 100 };
 
-    /// Construit une plage en normalisant des bornes arbitraires : `haut` est
-    /// ramené dans `[20, 100]`, puis `bas` dans `[0, haut − 20]`.
+    /// Builds a range by normalizing arbitrary bounds: `high` is
+    /// clamped into `[20, 100]`, then `low` into `[0, high − 20]`.
     pub fn normalized(low: i64, high: i64) -> Self {
         let min_width = i64::from(MIN_RANGE_WIDTH);
         let high = high.clamp(min_width, 100);
@@ -42,22 +42,22 @@ impl Range {
         }
     }
 
-    /// Borne basse.
+    /// Lower bound.
     pub fn low(self) -> u8 {
         self.low
     }
 
-    /// Borne haute.
+    /// Upper bound.
     pub fn high(self) -> u8 {
         self.high
     }
 
-    /// Largeur `haut − bas` (toujours ≥ 20).
+    /// Width `high − low` (always ≥ 20).
     pub fn width(self) -> u8 {
         self.high - self.low
     }
 
-    /// Édite la borne haute : elle s'arrête à `bas + 20`, sans pousser le bas.
+    /// Edits the upper bound: it stops at `low + 20`, without pushing the low.
     pub fn with_high(self, high: i64) -> Self {
         let floor = i64::from(self.low) + i64::from(MIN_RANGE_WIDTH);
         Self {
@@ -66,7 +66,7 @@ impl Range {
         }
     }
 
-    /// Édite la borne basse : elle s'arrête à `haut − 20`, sans pousser le haut.
+    /// Edits the lower bound: it stops at `high − 20`, without pushing the high.
     pub fn with_low(self, low: i64) -> Self {
         let ceiling = i64::from(self.high) - i64::from(MIN_RANGE_WIDTH);
         Self {
@@ -75,19 +75,19 @@ impl Range {
         }
     }
 
-    /// Niveau écran (0-100) correspondant à un niveau maître.
+    /// Display level (0-100) corresponding to a master level.
     ///
-    /// `bas + arrondi_au_plus_proche((haut − bas) × clamp(maître) / 100)`,
-    /// arrondi « demi vers le haut », en arithmétique entière.
+    /// `low + round_to_nearest((high − low) × clamp(master) / 100)`,
+    /// rounded "half up", using integer arithmetic.
     pub fn display_level(self, master: i64) -> u8 {
         let master = u32::from(clamp_percent(master));
         let offset = (u32::from(self.width()) * master + 50) / 100;
-        // offset <= width, donc low + offset <= high <= 100.
+        // offset <= width, so low + offset <= high <= 100.
         clamp_percent(i64::from(self.low) + i64::from(offset))
     }
 
-    /// Niveau maître correspondant à un niveau écran (inverse de
-    /// [`Range::display_level`]), le niveau étant d'abord clampé dans la plage.
+    /// Master level corresponding to a display level (inverse of
+    /// [`Range::display_level`]), the level first being clamped into the range.
     pub fn master_for_level(self, level: i64) -> u8 {
         let level = level.clamp(i64::from(self.low), i64::from(self.high));
         let width = i64::from(self.width());
@@ -96,8 +96,8 @@ impl Range {
     }
 }
 
-/// Reconstruit un maître en moyennant l'inverse du mappage des niveaux lus
-/// sur les écrans contrôlables (spec §4.5). Sans écran : 50.
+/// Rebuilds a master by averaging the inverse of the level mapping read
+/// from the controllable displays (spec §4.5). With no display: 50.
 pub fn reconstruct_master(displays: impl IntoIterator<Item = (Range, i64)>) -> u8 {
     let (sum, count) = displays
         .into_iter()

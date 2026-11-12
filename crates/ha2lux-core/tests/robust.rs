@@ -1,5 +1,5 @@
-//! Robustesse : aucune entrée (même hostile) ne doit faire paniquer un analyseur,
-//! et les invariants de sécurité tiennent pour toutes les entrées.
+//! Robustness: no input (even hostile) must make a parser panic,
+//! and the security invariants hold for all inputs.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ha2lux_core::config::Config;
@@ -32,10 +32,10 @@ proptest! {
         let _ = authority_key(&input);
     }
 
-    /// Une adresse acceptée est toujours http(s), sans identifiants intégrés.
+    /// An accepted address is always http(s), with no embedded credentials.
     #[test]
     fn validated_urls_are_http_without_credentials(input in "\\PC{0,120}") {
-        // `normalize_url` ne fait que normaliser ; c'est `check_url` qui valide.
+        // `normalize_url` only normalizes; it is `check_url` that validates.
         if let Ok(checked) = check_url(&input) {
             let url = checked.url;
             prop_assert!(url.starts_with("http://") || url.starts_with("https://"), "{url}");

@@ -1,4 +1,4 @@
-//! Menu, molette et OSD : logique pure.
+//! Menu, wheel and OSD: pure logic.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ha2lux_ipc::DisplayDto;
@@ -164,7 +164,7 @@ fn suspended_schedule_shows_its_resume_time() {
     assert!(labels(&build_menu(&s)).contains(&"Planning suspendu jusqu'à 20:00".to_owned()));
 }
 
-/// Lignes du sous-menu « À propos » (la dernière entrée avant « Quitter »).
+/// Rows of the "À propos" submenu (the last entry before "Quitter").
 fn about_lines(s: &TrayState) -> Vec<String> {
     let menu = build_menu(s);
     match find(&menu, "À propos") {
@@ -232,7 +232,7 @@ fn unreachable_daemon_reduces_the_menu_to_a_message_and_quit() {
     let s = TrayState::default();
     let menu = build_menu(&s);
     let text = labels(&menu);
-    // Message, « À propos » (version de l'icône + démon injoignable), puis Quitter.
+    // Message, "À propos" (icon version + daemon unreachable), then Quitter.
     assert_eq!(text.len(), 5, "{text:?}");
     assert!(text[0].contains("ne répond pas") && text[1] == "À propos");
     assert!(text[2].contains(env!("CARGO_PKG_VERSION")), "{text:?}");
@@ -298,7 +298,7 @@ fn the_icon_is_drawn_by_the_program_and_never_empty() {
         let clear = data.chunks(4).filter(|p| p[0] == 0).count();
         assert!(opaque > 10, "{size} : disque visible");
         assert!(clear > 10, "{size} : fond transparent");
-        // Le centre est plein, le coin est transparent.
+        // The center is filled, the corner is transparent.
         let at = |x: u32, y: u32| data[((y * size + x) * 4) as usize];
         assert_eq!(at(size / 2, size / 2), 255);
         assert_eq!(at(0, 0), 0);

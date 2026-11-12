@@ -1,18 +1,18 @@
-//! Icône dessinée par le programme (un soleil), indépendante du thème d'icônes du bureau.
+//! Icon drawn by the program (a sun), independent of the desktop icon theme.
 //!
-//! Certains thèmes n'ont pas d'image `display-brightness-symbolic` : l'espace de la zone de
-//! notification reste alors vide. Une image ARGB32 fournie directement s'affiche toujours.
+//! Some themes have no `display-brightness-symbolic` image: the notification area
+//! slot then stays empty. An ARGB32 image supplied directly always displays.
 
-/// Couleur du soleil (ambre, lisible sur fond clair comme sur fond sombre).
+/// Sun color (amber, readable on both light and dark backgrounds).
 const SUN: [u8; 3] = [0xF5, 0xB3, 0x01];
-/// Couleur quand le démon est injoignable.
+/// Color when the daemon is unreachable.
 const GREY: [u8; 3] = [0x8A, 0x8A, 0x8A];
 
 fn clamp01(v: f64) -> f64 {
     v.clamp(0.0, 1.0)
 }
 
-/// Image ARGB32 (octets A, R, V, B par pixel, ordre réseau) de `size` × `size` pixels.
+/// ARGB32 image (A, R, G, B bytes per pixel, network order) of `size` × `size` pixels.
 pub fn sun_argb(size: u32, reachable: bool) -> Vec<u8> {
     let color = if reachable { SUN } else { GREY };
     let n = f64::from(size);
@@ -23,9 +23,9 @@ pub fn sun_argb(size: u32, reachable: bool) -> Vec<u8> {
         for x in 0..size {
             let (dx, dy) = (f64::from(x) - center, f64::from(y) - center);
             let dist = dx.hypot(dy);
-            // Disque central, bord adouci sur un pixel.
+            // Central disc, edge softened over one pixel.
             let disc = clamp01(radius * 0.40 - dist + 0.5);
-            // Huit rayons : distance au rayon le plus proche (axes et diagonales).
+            // Eight rays: distance to the nearest ray (axes and diagonals).
             let angle = dy.atan2(dx);
             let step = std::f64::consts::FRAC_PI_4;
             let off = (angle / step - (angle / step).round()).abs() * step;
@@ -34,7 +34,7 @@ pub fn sun_argb(size: u32, reachable: bool) -> Vec<u8> {
                 clamp01((radius * 0.95 - dist) + 0.5) * clamp01((dist - radius * 0.58) + 0.5);
             let ray = clamp01(n * 0.065 - across + 0.5) * ray_len;
             let alpha = clamp01(disc + ray);
-            // La conversion est bornée à 0..=255 par `clamp01`.
+            // The conversion is bounded to 0..=255 by `clamp01`.
             let a = (alpha * 255.0).round() as u8;
             data.extend_from_slice(&[a, color[0], color[1], color[2]]);
         }

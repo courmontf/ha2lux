@@ -1,5 +1,5 @@
-//! Découverte du matériel, derrière un trait pour pouvoir tester le démon
-//! avec des écrans factices.
+//! Hardware discovery, behind a trait so the daemon can be tested
+//! with fake displays.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -18,38 +18,38 @@ use ha2lux_backends::mock::{MockBackend, MockControl};
 use ha2lux_core::hw::level_from_raw;
 use ha2lux_core::{DisplayBackend, DisplayId, DisplayInfo, DisplayKind};
 
-/// Future boxée (le trait de découverte doit être utilisable comme objet).
+/// Boxed future (the discovery trait must be usable as an object).
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-/// Délai maximal d'une sonde (probe + lecture) d'un écran.
+/// Maximum duration of a display probe (probe + read).
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Un écran trouvé par une énumération.
+/// A display found by an enumeration.
 pub struct Found {
-    /// Identité (le maximum est connu quand l'écran est contrôlable).
+    /// Identity (the maximum is known when the display is controllable).
     pub info: DisplayInfo,
-    /// Backend prêt à piloter, présent seulement si l'écran est contrôlable.
+    /// Backend ready to drive, present only if the display is controllable.
     pub backend: Option<AnyBackend>,
-    /// Niveau écran lu (0-100).
+    /// Display level read (0-100).
     pub level: Option<u8>,
-    /// Bus I²C (DDC), s'il y en a un.
+    /// I²C bus (DDC), if there is one.
     pub bus: Option<u32>,
-    /// Plancher backlight en valeur brute.
+    /// Backlight floor as a raw value.
     pub floor: u32,
 }
 
-/// Paramètres d'une énumération.
+/// Parameters of an enumeration.
 #[derive(Clone, Debug, Default)]
 pub struct DiscoverOptions {
-    /// Associer les bus par EDID (pilote NVIDIA) ; effectue de vraies lectures I²C.
+    /// Match buses by EDID (NVIDIA driver); performs real I²C reads.
     pub edid_bus_matching: bool,
-    /// Planchers de backlight par écran.
+    /// Per-display backlight floors.
     pub floors: HashMap<DisplayId, u32>,
 }
 
-/// Source d'écrans.
+/// Display source.
 pub trait Hardware: Send + Sync + 'static {
-    /// Énumère les écrans (sonde chacun). Peut durer : jamais appelée par l'acteur lui-même.
+    /// Enumerates the displays (probes each one). May take a while: never called by the actor itself.
     fn discover(&self, options: DiscoverOptions) -> BoxFuture<'_, Vec<Found>>;
 }
 
@@ -95,7 +95,7 @@ async fn probe_found(mut backend: AnyBackend, bus: Option<u32>, floor: u32) -> F
     }
 }
 
-/// Matériel réel : backlight (sysfs + logind) et DDC/CI (i2c-dev).
+/// Real hardware: backlight (sysfs + logind) and DDC/CI (i2c-dev).
 pub struct SystemHardware {
     root: PathBuf,
     locks: Arc<BusLocks>,
@@ -104,7 +104,7 @@ pub struct SystemHardware {
 }
 
 impl SystemHardware {
-    /// Matériel du système réel.
+    /// Real system hardware.
     pub fn new() -> Self {
         Self {
             root: PathBuf::from("/"),
@@ -172,7 +172,7 @@ struct MockScreen {
     responds: bool,
 }
 
-/// Matériel factice pour les tests du démon.
+/// Fake hardware for the daemon tests.
 #[derive(Default)]
 pub struct MockHardware {
     screens: Mutex<Vec<MockScreen>>,
@@ -181,12 +181,12 @@ pub struct MockHardware {
 }
 
 impl MockHardware {
-    /// Matériel factice vide.
+    /// Empty fake hardware.
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
     }
 
-    /// Ajoute un écran (niveau initial 0-100) et renvoie sa commande de contrôle.
+    /// Adds a display (initial level 0-100) and returns its control handle.
     pub fn add(&self, id: &str, kind: DisplayKind, max: u32, level: u8) -> MockControl {
         let (_, control) = MockBackend::new(
             id,
@@ -220,22 +220,22 @@ impl MockHardware {
         }
     }
 
-    /// Branche ou débranche un écran.
+    /// Plugs or unplugs a display.
     pub fn set_present(&self, id: &str, present: bool) {
         self.with_screen(id, |s| s.present = present);
     }
 
-    /// L'écran répond (ou non) à la sonde.
+    /// The display responds (or not) to the probe.
     pub fn set_responding(&self, id: &str, responds: bool) {
         self.with_screen(id, |s| s.responds = responds);
     }
 
-    /// Durée simulée d'une énumération.
+    /// Simulated duration of an enumeration.
     pub fn set_discover_delay(&self, delay: Duration) {
         *self.delay.lock().unwrap_or_else(PoisonError::into_inner) = delay;
     }
 
-    /// Nombre d'énumérations effectuées.
+    /// Number of enumerations performed.
     pub fn discoveries(&self) -> usize {
         self.discoveries.load(Ordering::SeqCst)
     }

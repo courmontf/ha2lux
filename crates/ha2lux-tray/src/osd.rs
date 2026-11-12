@@ -1,18 +1,18 @@
-//! Affichage du niveau par une **notification remplaçable** (`org.freedesktop.Notifications`).
+//! Level display through a **replaceable notification** (`org.freedesktop.Notifications`).
 //!
-//! On montre le niveau **maître** (pas celui d'un écran, qui se bloque en bout de plage).
-//! La notification est remplacée à chaque cran : pas d'empilement.
+//! We show the **master** level (not a single display's, which gets stuck at the end of its range).
+//! The notification is replaced on every notch: no stacking.
 
 use std::collections::HashMap;
 
 use zbus::zvariant::Value;
 
-/// Durée d'affichage, en millisecondes.
+/// Display duration, in milliseconds.
 pub const EXPIRE_MS: i32 = 900;
-/// Clé de synchronisation : les serveurs qui ne gèrent pas `replaces_id` la respectent.
+/// Synchronization key: servers that do not handle `replaces_id` honor it.
 pub const SYNC_KEY: &str = "ha2lux-osd";
 
-/// Proxy minimal du serveur de notifications.
+/// Minimal proxy for the notification server.
 pub mod proxy {
     #![allow(missing_docs)]
 
@@ -41,7 +41,7 @@ pub mod proxy {
     }
 }
 
-/// Indications jointes à la notification : barre de progression, remplacement, discrétion.
+/// Hints attached to the notification: progress bar, replacement, discretion.
 pub fn hints(level: u8) -> HashMap<&'static str, Value<'static>> {
     let mut hints = HashMap::new();
     hints.insert("value", Value::I32(i32::from(level.min(100))));
@@ -63,7 +63,7 @@ pub struct Osd {
 }
 
 impl Osd {
-    /// Crée l'OSD sur cette connexion.
+    /// Creates the OSD on this connection.
     pub async fn new(connection: &zbus::Connection) -> zbus::Result<Self> {
         Ok(Self {
             proxy: proxy::NotificationsProxy::new(connection).await?,
@@ -71,7 +71,7 @@ impl Osd {
         })
     }
 
-    /// Affiche (ou remplace) la notification. Une erreur n'a pas de conséquence : l'OSD est un confort.
+    /// Shows (or replaces) the notification. An error has no consequence: the OSD is a convenience.
     pub async fn show(&mut self, level: u8) {
         match self
             .proxy

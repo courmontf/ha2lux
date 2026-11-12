@@ -1,4 +1,4 @@
-//! Fichiers : écriture atomique, chargement tolérant, chemins XDG (T-CFG-01/08/09).
+//! Files: atomic writes, tolerant loading, XDG paths (T-CFG-01/08/09).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fs;
@@ -65,7 +65,7 @@ fn t_cfg_09_hard_kill_leaves_only_a_stale_temp_that_is_ignored_then_cleaned() {
     let dir = TempDir::new().unwrap();
     let file = dir.path().join("config.toml");
     write_atomic(&file, Config::default().to_toml().unwrap().as_bytes()).unwrap();
-    // `kill -9` après l'écriture du temporaire et avant le renommage : il reste un résidu tronqué.
+    // `kill -9` after writing the temp file and before the rename: a truncated leftover remains.
     fs::write(dir.path().join(".config.toml.tmp.4242.0"), b"tronq").unwrap();
     assert_eq!(
         read_config(&file).unwrap().config,
@@ -215,7 +215,7 @@ fn corrupt_state_is_set_aside_not_silently_overwritten() {
         "master = [[["
     );
     assert!(!file.exists());
-    // Une version plus récente est traitée de la même façon.
+    // A newer version is handled the same way.
     fs::write(&file, "version = 9\nmaster = 5\n").unwrap();
     assert!(load_state(&file).set_aside);
 }
@@ -224,7 +224,7 @@ fn corrupt_state_is_set_aside_not_silently_overwritten() {
 fn backup_copies_the_original_once_it_exists() {
     let dir = TempDir::new().unwrap();
     let file = dir.path().join("config.toml");
-    backup(&file).unwrap(); // absent : rien à faire
+    backup(&file).unwrap(); // missing: nothing to do
     assert!(!dir.path().join("config.toml.bak").exists());
     fs::write(&file, "# mon commentaire\n").unwrap();
     backup(&file).unwrap();
@@ -260,7 +260,7 @@ fn xdg_paths() {
         paths.state_file.to_str(),
         Some("/home/u/.local/state/ha2lux/state.toml")
     );
-    // Un chemin XDG relatif est ignoré, comme l'exige la convention.
+    // A relative XDG path is ignored, as the convention requires.
     let paths =
         Paths::from_env(env(&[("XDG_CONFIG_HOME", "relatif"), ("HOME", "/home/u")])).unwrap();
     assert_eq!(

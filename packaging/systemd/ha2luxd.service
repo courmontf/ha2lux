@@ -1,38 +1,38 @@
-# Unité systemd --user du démon ha2lux.
+# systemd --user unit for the ha2lux daemon.
 #
-# À installer VOUS-MÊME (ha2lux ne modifie jamais votre système). Pour une installation locale :
+# Install it YOURSELF (ha2lux never modifies your system). For a local installation:
 #   install -Dm755 target/release/ha2luxd ~/.local/bin/ha2luxd
 #   sed "s|/usr/bin/ha2luxd|$HOME/.local/bin/ha2luxd|" packaging/systemd/ha2luxd.service \
 #       | install -Dm644 /dev/stdin ~/.config/systemd/user/ha2luxd.service
 #   systemctl --user daemon-reload && systemctl --user enable --now ha2luxd.service
-# Journal : journalctl --user -u ha2luxd -f   (niveau : `systemctl --user edit ha2luxd` puis
+# Log: journalctl --user -u ha2luxd -f   (level: `systemctl --user edit ha2luxd` then
 # Environment=RUST_LOG=debug)
 
 [Unit]
 Description=ha2lux — brightness control for all displays
 PartOf=graphical-session.target
 After=graphical-session.target
-# Redémarrages bornés : un démon qui échoue en boucle ne doit pas marteler les bus I²C.
+# Bounded restarts: a daemon that fails in a loop must not hammer the I²C buses.
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
-# Type=dbus : le service est « démarré » quand le nom org.ha2lux.Daemon est acquis.
+# Type=dbus: the service counts as "started" once the org.ha2lux.Daemon name is acquired.
 Type=dbus
 BusName=org.ha2lux.Daemon
 ExecStart=/usr/bin/ha2luxd
-# Arrêt propre sur SIGTERM : l'état est écrit et les écrans ne sont plus pilotés avant de
-# libérer le nom (jamais deux démons sur un bus DDC).
+# Clean stop on SIGTERM: the state is written and the displays are no longer driven before
+# the name is released (never two daemons on one DDC bus).
 TimeoutStopSec=15
 Restart=on-failure
 RestartSec=3
 UMask=0077
-# Durcissement sans espace de noms (fonctionne sans privilèges) ; l'accès à /dev/i2c-* et à
-# sysfs est conservé.
+# Hardening without namespaces (works unprivileged); access to /dev/i2c-* and to
+# sysfs is kept.
 NoNewPrivileges=yes
 LockPersonality=yes
 RestrictRealtime=yes
-# AF_NETLINK : événements de branchement d'écrans (uevent) et sondage du noyau.
+# AF_NETLINK: display hot-plug events (uevent) and kernel probing.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]

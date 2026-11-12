@@ -1,6 +1,6 @@
 [package]
 name = "ha2lux-ipc"
-description = "Types et noms D-Bus partagés entre le démon, la CLI et le tray."
+description = "D-Bus types and names shared by the daemon, the CLI and the tray."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

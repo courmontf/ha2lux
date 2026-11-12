@@ -1,4 +1,4 @@
-//! Santé du lien capteur : T-HA-03/04 (validité), T-HA-11..13 (péremption, hors ligne, dégradé).
+//! Sensor link health: T-HA-03/04 (validity), T-HA-11..13 (staleness, offline, degraded).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{HaHealth, HealthConfig, HealthTracker, is_valid_lux};
 use proptest::prelude::*;
@@ -105,7 +105,7 @@ fn failures_must_be_consecutive() {
         for i in 0..5 {
             t.on_failure(round * 100_000 + i);
         }
-        t.on_reading(round * 100_000 + 50, 10.0, 0); // une réponse réussie interrompt la série d'échecs
+        t.on_reading(round * 100_000 + 50, 10.0, 0); // a successful response interrupts the series of failures
     }
     assert_eq!(t.health(), HaHealth::Ok);
 }
@@ -140,7 +140,7 @@ fn degraded_also_applies_when_no_valid_measurement_ever_arrived() {
 fn stale_readings_do_not_prevent_degradation() {
     let mut t = tracker();
     for minute in 0..=15 {
-        t.on_reading(minute * MIN, 40.0, 11 * MIN); // HA répond, mais avec une mesure périmée
+        t.on_reading(minute * MIN, 40.0, 11 * MIN); // HA responds, but with a stale measurement
     }
     assert_eq!(t.health(), HaHealth::Degraded);
 }
@@ -152,7 +152,7 @@ fn offline_wins_over_degraded() {
         t.on_failure(20 * MIN + i);
     }
     assert_eq!(t.health(), HaHealth::Offline);
-    // Joignable de nouveau mais sans mesure depuis 20 min : dégradé, pas sain.
+    // Reachable again but no measurement for 20 min: degraded, not healthy.
     assert_eq!(t.on_no_value(21 * MIN).health, HaHealth::Degraded);
 }
 

@@ -1,8 +1,8 @@
-//! Lecture REST : `GET /api/states/<entité>` avec `Authorization: Bearer <jeton>`.
+//! REST read: `GET /api/states/<entity>` with `Authorization: Bearer <token>`.
 //!
-//! Garanties : **aucune redirection suivie** (le jeton ne part jamais ailleurs), TLS
-//! toujours validé (magasin de certificats du système, aucun contournement), délais de
-//! 8 s, réponse bornée à 256 Kio, proxy du système respecté.
+//! Guarantees: **no redirect followed** (the token is never sent elsewhere), TLS
+//! always validated (system certificate store, no bypass), timeouts of
+//! 8 s, response capped at 256 KiB, system proxy honored.
 
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use reqwest::redirect::Policy;
@@ -12,14 +12,14 @@ use crate::config::HaConfig;
 use crate::error::{HaError, MAX_BODY, from_reqwest};
 use crate::reading::{Reading, parse_state_body};
 
-/// Client REST d'une entité.
+/// REST client for an entity.
 pub struct RestClient {
     client: Client,
     config: HaConfig,
 }
 
 impl RestClient {
-    /// Crée le client.
+    /// Creates the client.
     pub fn new(config: &HaConfig) -> Result<Self, HaError> {
         let client = Client::builder()
             .redirect(Policy::none())
@@ -34,11 +34,11 @@ impl RestClient {
         })
     }
 
-    /// Lit l'état courant de l'entité.
+    /// Reads the entity's current state.
     pub async fn read(&self) -> Result<Reading, HaError> {
         let mut bearer = HeaderValue::from_str(&format!("Bearer {}", self.config.token.expose()))
             .map_err(|_| HaError::Protocol("token unusable in a header".to_owned()))?;
-        bearer.set_sensitive(true); // jamais affiché, même par les journaux de la bibliothèque
+        bearer.set_sensitive(true); // never displayed, even by the library's logs
         let mut response = self
             .client
             .get(self.config.state_url())

@@ -1,4 +1,4 @@
-//! Boucle d'exécution de l'icône : client D-Bus du démon, icône `ksni`, OSD de la molette.
+//! Tray icon run loop: daemon D-Bus client, `ksni` icon, wheel OSD.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -15,19 +15,19 @@ use crate::model::{Action, Entry, TrayState, build_menu, tooltip};
 use crate::osd::Osd;
 use crate::wheel::{FLUSH_AFTER, Wheel};
 
-/// Relecture périodique de l'état quand le démon répond.
+/// Periodic state refresh while the daemon responds.
 const REFRESH: Duration = Duration::from_secs(30);
-/// Relecture quand le démon est injoignable (il peut démarrer à tout moment).
+/// Refresh while the daemon is unreachable (it may start at any time).
 const REFRESH_UNREACHABLE: Duration = Duration::from_secs(3);
-/// Durée pendant laquelle un menu ouvert reporte les relances des écrans en attente.
+/// How long an open menu postpones retries for pending displays.
 const UI_OPEN_FOR: Duration = Duration::from_secs(15);
 
-/// Échec de l'icône.
+/// Tray icon failure.
 #[derive(Debug)]
 pub enum AppError {
     /// Pas de bus de session.
     Bus(String),
-    /// Aucun hôte d'icônes (pas de StatusNotifierWatcher).
+    /// No icon host (no StatusNotifierWatcher).
     NoWatcher(String),
 }
 
@@ -42,11 +42,11 @@ impl std::fmt::Display for AppError {
 
 impl std::error::Error for AppError {}
 
-/// Réglages de l'icône.
+/// Tray icon settings.
 pub struct AppOptions {
     /// Connexion explicite (tests) ; `None` : bus de session.
     pub connection: Option<zbus::Connection>,
-    /// Fichier de configuration ouvert par « Réglages… ».
+    /// Configuration file opened by "Réglages…".
     pub config_file: PathBuf,
 }
 
@@ -72,7 +72,7 @@ fn convert(entries: &[Entry], tx: &mpsc::UnboundedSender<Action>) -> Vec<MenuIte
                     enabled: *enabled,
                     activate: Box::new(move |_: &mut Tray| {
                         if let Some(action) = &action {
-                            // La boucle a pu s'arrêter : sans importance.
+                            // The loop may have stopped already: irrelevant.
                             let _ = tx.send(action.clone());
                         }
                     }),
@@ -123,7 +123,7 @@ impl ksni::Tray for Tray {
     }
 
     fn icon_name(&self) -> String {
-        // Vide : l'image fournie par `icon_pixmap` est utilisée (aucune dépendance au thème).
+        // Empty: the image provided by `icon_pixmap` is used (no theme dependency).
         String::new()
     }
 
@@ -161,7 +161,7 @@ impl ksni::Tray for Tray {
     }
 }
 
-/// Lit l'état complet du démon.
+/// Reads the daemon's full state.
 pub async fn read_state(proxy: &DaemonProxy<'_>) -> Option<TrayState> {
     let status = proxy.status().await.ok()?;
     let displays = proxy.list().await.ok()?;
@@ -176,7 +176,7 @@ async fn at(deadline: Option<Instant>) {
     }
 }
 
-/// Exécute l'icône jusqu'à « Quitter ».
+/// Runs the tray icon until "Quitter".
 pub async fn run(options: AppOptions) -> Result<(), AppError> {
     let connection = match options.connection {
         Some(connection) => connection,
@@ -206,7 +206,7 @@ pub async fn run(options: AppOptions) -> Result<(), AppError> {
     };
     let mut osd = Osd::new(&connection).await.ok();
 
-    // Les flux de signaux : un changement côté démon (raccourci, CLI, planning…) rafraîchit l'icône.
+    // Signal streams: a change on the daemon side (shortcut, CLI, schedule...) refreshes the icon.
     let mut level = proxy
         .receive_level_changed()
         .await
@@ -301,7 +301,7 @@ async fn run_action(proxy: &DaemonProxy<'_>, config_file: &std::path::Path, acti
         Action::Toggle(feature, on) => proxy.set_mode(feature, on).await,
         Action::Rescan => proxy.rescan().await,
         Action::OpenSettings => {
-            // Ouverture par le gestionnaire de fichiers du bureau ; un échec n'est pas grave.
+            // Opened by the desktop file manager; a failure is harmless.
             if let Err(error) = tokio::process::Command::new("xdg-open")
                 .arg(config_file)
                 .spawn()
@@ -312,8 +312,8 @@ async fn run_action(proxy: &DaemonProxy<'_>, config_file: &std::path::Path, acti
         }
         Action::ReloadConfig => {
             let result = proxy.reload().await;
-            // La langue est relue même si le démon refuse (fichier invalide : il garde
-            // l'ancienne configuration, et `apply_file` ignore un fichier mal formé).
+            // The language is reloaded even if the daemon refuses (invalid file: it keeps
+            // the old configuration, and `apply_file` ignores a malformed file).
             ha2lux_i18n::config::apply_file(config_file);
             result
         }

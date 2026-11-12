@@ -1,5 +1,5 @@
-//! T-ST, T-IDL et T-SCH-21 : scénarios de la machine d'états avec backend
-//! factice et horloge virtuelle (aucun `sleep` réel).
+//! T-ST, T-IDL and T-SCH-21: state machine scenarios with a mock
+//! backend and a virtual clock (no real `sleep`).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -59,7 +59,7 @@ fn initial(master: Option<u8>) -> InitialState {
     }
 }
 
-/// Monde avec les écrans donnés (niveaux initiaux), énumération faite et journal vidé.
+/// World with the given displays (initial levels), enumeration done and log cleared.
 fn world(start: &str, cfg: ControllerConfig, master: Option<u8>, displays: &[(&str, u8)]) -> World {
     let mut w = World::new(start, cfg, initial(master));
     for &(name, level) in displays {
@@ -70,7 +70,7 @@ fn world(start: &str, cfg: ControllerConfig, master: Option<u8>, displays: &[(&s
     w
 }
 
-/// Active l'auto : mesure initiale `lux`, qui devient propriétaire.
+/// Enables auto: initial measurement `lux`, which becomes the owner.
 fn auto_world(cfg: ControllerConfig, lux: f64) -> World {
     let mut w = world("14:00", cfg, Some(50), &[("A", 50)]);
     w.send_ok(Event::Lux(lux));
@@ -142,7 +142,7 @@ fn t_st_05_auto_without_measure_is_not_owner() {
         w.status().suspension.is_some(),
         "le planning est suspendu comme sans auto"
     );
-    // Un réveil restaure le dernier maître : l'auto n'est pas propriétaire.
+    // A wake-up restores the last master: auto is not the owner.
     w.send_ok(Event::Wake);
     w.rescan().unwrap();
     assert_eq!(w.level_of("A"), 70);
@@ -152,7 +152,7 @@ fn t_st_05_auto_without_measure_is_not_owner() {
 fn t_st_06_wake_reapplies_forced_without_ramp() {
     let mut w = auto_world(auto_cfg(), 10.0);
     assert_eq!(w.level_of("A"), 40);
-    w.plug("A", 100); // l'écran s'est remis à 100 % (même identité)
+    w.plug("A", 100); // the display reset itself to 100% (same identity)
     w.send_ok(Event::Wake);
     assert!(
         w.rescans
@@ -169,7 +169,7 @@ fn wake_reapplies_twice() {
     let mut w = world("14:00", ControllerConfig::default(), Some(60), &[("A", 60)]);
     w.send_ok(Event::Wake);
     w.rescan().unwrap();
-    w.plug("A", 100); // certains écrans se remettent à 100 % après le premier réglage
+    w.plug("A", 100); // some displays reset to 100% after the first adjustment
     w.advance(3_000);
     assert_eq!(w.level_of("A"), 60, "seconde ré-application après ~3 s");
 }
@@ -218,7 +218,7 @@ fn t_st_09_ramp_writes_only_changed_displays() {
     w.send_ok(Event::Lux(8.0));
     w.send_ok(Event::Lux(8.0));
     w.clear_log();
-    w.advance(2_000); // 20 pas de rampe
+    w.advance(2_000); // 20 ramp steps
     let a = w.writes_to("A");
     let b = w.writes_to("B");
     assert_eq!(a.len(), 20, "A change à chaque pas");
@@ -383,7 +383,7 @@ fn t_st_15_unknown_master_is_reconstructed_then_restored() {
     assert_eq!(w.master(), Some(40), "reconstruit sans rien écrire");
     assert!(w.log.is_empty());
     assert!(w.persisted.contains(&Persist::Master));
-    w.plug("A", 100); // l'écran se remet à 100 % au réveil
+    w.plug("A", 100); // the display resets to 100% on wake-up
     w.send_ok(Event::Wake);
     w.rescan().unwrap();
     assert_eq!(w.level_of("A"), 40, "restauration effective");
@@ -456,7 +456,7 @@ fn set_display_refused_when_unavailable_and_rebuilds_master() {
     });
     assert_eq!(w.writes_to("A"), [30]);
     assert!(w.writes_to("B").is_empty());
-    // A à 30 (plage 0-100 → 30), B à 70 (plage 40-100 → 50) : moyenne 40.
+    // A at 30 (range 0-100 -> 30), B at 70 (range 40-100 -> 50): average 40.
     assert_eq!(w.master(), Some(40));
     w.set_responding("B", false);
     w.rescan().unwrap();
@@ -622,12 +622,12 @@ fn t_idl_04_05_blocked_then_released() {
 
 #[test]
 fn t_idl_06_activity_reapplies_by_priority() {
-    // Dernier maître.
+    // Latest master.
     let mut w = idle_world(Some(50));
     w.send_ok(DIM);
     w.send_ok(Event::Activity);
     assert_eq!((w.level_of("A"), w.level_of("B")), (50, 70));
-    // Planning > maître.
+    // Schedule > master.
     let mut w = world(
         "14:00",
         ControllerConfig {

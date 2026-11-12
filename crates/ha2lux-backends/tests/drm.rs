@@ -1,4 +1,4 @@
-//! Découverte DRM/sysfs sur un faux arbre (aucun accès au système réel).
+//! DRM/sysfs discovery on a fake tree (no access to the real system).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::Path;
@@ -7,7 +7,7 @@ use ha2lux_backends::drm::{external_candidates, is_internal_connector, scan};
 use ha2lux_core::Edid;
 use tempfile::TempDir;
 
-/// Crée `card1-<name>` avec statut, EDID et lien `ddc` vers `i2c-<bus>`.
+/// Creates `card1-<name>` with status, EDID and `ddc` link to `i2c-<bus>`.
 fn connector(root: &Path, dir: &str, status: &str, edid: Option<&[u8]>, bus: Option<u32>) {
     let path = root.join(dir);
     std::fs::create_dir_all(&path).unwrap();
@@ -174,7 +174,7 @@ fn t_ddc_08_identity_follows_the_edid_not_the_connector() {
     let first = TempDir::new().unwrap();
     connector(first.path(), "card0-DP-1", "connected", Some(&a), Some(5));
     connector(first.path(), "card0-DP-2", "connected", Some(&b), Some(6));
-    // Les deux écrans échangent leur ordre d'énumération / leurs connecteurs.
+    // The two displays swap their enumeration order / their connectors.
     let second = TempDir::new().unwrap();
     connector(second.path(), "card0-DP-1", "connected", Some(&b), Some(8));
     connector(second.path(), "card0-DP-2", "connected", Some(&a), Some(9));

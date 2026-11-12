@@ -1,6 +1,6 @@
-//! WebSocket Home Assistant : accueil → authentification par jeton → confirmation →
-//! souscription (protocole de Home Assistant). Le jeton ne circule que dans le message
-//! d'authentification ; une redirection n'est jamais suivie ; TLS est toujours validé.
+//! Home Assistant WebSocket: greeting → token authentication → confirmation →
+//! subscription (Home Assistant protocol). The token only travels in the
+//! authentication message; a redirect is never followed; TLS is always validated.
 
 use std::sync::Arc;
 
@@ -18,18 +18,18 @@ use crate::config::HaConfig;
 use crate::error::{HaError, MAX_BODY, short};
 use crate::reading::{Reading, ReadingValue, parse_state_value};
 
-/// Événement reçu sur la souscription.
+/// Event received on the subscription.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WsEvent {
-    /// Nouvel état de l'entité.
+    /// New state of the entity.
     State(Reading),
-    /// Réponse au battement de cœur.
+    /// Heartbeat response.
     Pong,
-    /// Autre message (accusé de réception…), sans importance ici.
+    /// Other message (acknowledgement…), irrelevant here.
     Other,
 }
 
-/// Session WebSocket authentifiée.
+/// Authenticated WebSocket session.
 pub struct WsClient {
     socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
     next_id: u64,
@@ -62,7 +62,7 @@ fn map_ws_error(error: WsError) -> HaError {
 }
 
 impl WsClient {
-    /// Se connecte et s'authentifie, le tout sous le délai de la requête.
+    /// Connects and authenticates, all within the request timeout.
     pub async fn connect(config: &HaConfig) -> Result<Self, HaError> {
         let timeout = config.timeouts.request;
         match tokio::time::timeout(timeout, Self::connect_inner(config)).await {
@@ -79,7 +79,7 @@ impl WsClient {
             .max_frame_size(Some(MAX_BODY));
         let connector = if url.scheme() == "wss" {
             use rustls_platform_verifier::ConfigVerifierExt;
-            // Vérificateur de certificats du système : aucun contournement n'existe.
+            // System certificate verifier: there is no bypass.
             let tls = rustls::ClientConfig::with_platform_verifier()
                 .map_err(|e| HaError::Tls(short(&e.to_string())))?;
             Some(Connector::Rustls(Arc::new(tls)))
@@ -111,7 +111,7 @@ impl WsClient {
                 Some(Ok(Message::Close(_))) => {
                     return Err(HaError::Connection("closed by Home Assistant".to_owned()));
                 }
-                Some(Ok(_)) => {} // ping/pong de bas niveau, binaire : ignorés
+                Some(Ok(_)) => {} // low-level ping/pong, binary: ignored
             }
         }
     }
@@ -128,7 +128,7 @@ impl WsClient {
         if hello["type"] != "auth_required" {
             return Err(HaError::Protocol("message d'accueil inattendu".to_owned()));
         }
-        // Le jeton ne quitte la machine que dans ce message, sur la connexion déjà validée.
+        // The token leaves the machine only in this message, over the already validated connection.
         self.send_json(&json!({"type": "auth", "access_token": config.token.expose()}))
             .await?;
         match self.recv_json().await?["type"].as_str() {
@@ -146,7 +146,7 @@ impl WsClient {
         id
     }
 
-    /// S'abonne aux changements d'état de `entity` (`subscribe_trigger`, ouvert à tout compte).
+    /// Subscribes to state changes of `entity` (`subscribe_trigger`, open to any account).
     pub async fn subscribe_entity(&mut self, entity: &str) -> Result<(), HaError> {
         let id = self.next_command_id();
         self.send_json(&json!({"id": id, "type": "subscribe_trigger", "trigger": {"platform": "state", "entity_id": entity}}))
@@ -172,13 +172,13 @@ impl WsClient {
             .map_err(|_| HaError::Timeout)?
     }
 
-    /// Envoie un battement de cœur ; la réponse arrive par [`WsClient::next_event`].
+    /// Sends a heartbeat; the response arrives via [`WsClient::next_event`].
     pub async fn ping(&mut self) -> Result<(), HaError> {
         let id = self.next_command_id();
         self.send_json(&json!({"id": id, "type": "ping"})).await
     }
 
-    /// Prochain événement. **Annulable sans perte** : l'appelant peut abandonner l'attente.
+    /// Next event. **Cancel-safe**: the caller may abandon the wait.
     pub async fn next_event(&mut self) -> Result<WsEvent, HaError> {
         let message = self.recv_json().await?;
         Ok(match message["type"].as_str() {
@@ -196,8 +196,8 @@ impl WsClient {
         })
     }
 
-    /// Fait rendre un gabarit par Home Assistant et renvoie le texte obtenu. Ouvert à tout
-    /// compte (l'équivalent REST exige un administrateur).
+    /// Has Home Assistant render a template and returns the resulting text. Open to any
+    /// account (the REST equivalent requires an administrator).
     pub async fn render_template(&mut self, template: &str) -> Result<String, HaError> {
         let id = self.next_command_id();
         self.send_json(&json!({"id": id, "type": "render_template", "template": template, "timeout": 5, "report_errors": true})).await?;

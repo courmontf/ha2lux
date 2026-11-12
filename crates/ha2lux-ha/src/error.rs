@@ -1,49 +1,49 @@
-//! Erreurs du client Home Assistant. **Aucun message ne contient le jeton** : les
-//! erreurs de la bibliothèque HTTP sont nettoyées de leur URL avant d'être rendues.
+//! Home Assistant client errors. **No message contains the token**: errors
+//! from the HTTP library have their URL stripped before being returned.
 
 use thiserror::Error;
 
-/// Taille maximale acceptée pour une réponse (256 Kio).
+/// Maximum accepted response size (256 KiB).
 pub const MAX_BODY: usize = 256 * 1024;
 
-/// Échec d'un échange avec Home Assistant.
+/// Failure of an exchange with Home Assistant.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum HaError {
-    /// Jeton refusé (401/403, `auth_invalid`). Inutile de réessayer en boucle.
+    /// Token rejected (401/403, `auth_invalid`). No point retrying in a loop.
     #[error("authentication refused: token invalid or revoked")]
     Auth,
-    /// L'entité n'existe pas (404).
+    /// The entity does not exist (404).
     #[error("entity not found")]
     NotFound,
-    /// Redirection : jamais suivie, pour que le jeton ne parte pas ailleurs.
+    /// Redirect: never followed, so the token is not sent elsewhere.
     #[error("redirect refused: the token is never sent to another address")]
     Redirect,
-    /// Réponse de plus de 256 Kio.
+    /// Response larger than 256 KiB.
     #[error("response too large (over 256 KiB)")]
     TooLarge,
-    /// Certificat invalide ou erreur TLS : aucun contournement n'existe.
+    /// Invalid certificate or TLS error: there is no bypass.
     #[error("TLS error: {0}")]
     Tls(String),
-    /// Délai dépassé (8 s).
+    /// Timeout exceeded (8 s).
     #[error("timed out")]
     Timeout,
-    /// Connexion impossible (résolution, refus, coupure).
+    /// Connection impossible (resolution, refusal, drop).
     #[error("connection failed: {0}")]
     Connection(String),
-    /// Réponse que le protocole ne permet pas d'interpréter.
+    /// Response the protocol does not allow interpreting.
     #[error("unexpected response: {0}")]
     Protocol(String),
 }
 
 impl HaError {
-    /// Échec d'authentification : le client doit se taire longtemps (un serveur Home
-    /// Assistant bannit les adresses qui échouent trop souvent).
+    /// Authentication failure: the client must stay quiet for a long time (a Home
+    /// Assistant server bans addresses that fail too often).
     pub fn is_auth(&self) -> bool {
         matches!(self, Self::Auth)
     }
 
-    /// Message localisable pour un client (clé de catalogue + arguments) ; voir
-    /// [`ha2lux_i18n::wire`]. Le `Display` reste le texte pour les journaux.
+    /// Localizable message for a client (catalog key + arguments); see
+    /// [`ha2lux_i18n::wire`]. `Display` remains the text for logs.
     pub fn to_wire(&self) -> String {
         use ha2lux_i18n::wire::encode;
         match self {
@@ -59,7 +59,7 @@ impl HaError {
     }
 }
 
-/// Classe une erreur de `reqwest` sans jamais exposer d'URL ni d'en-tête.
+/// Classifies a `reqwest` error without ever exposing a URL or header.
 pub(crate) fn from_reqwest(error: reqwest::Error) -> HaError {
     let error = error.without_url();
     if error.is_timeout() {
@@ -95,7 +95,7 @@ pub(crate) fn from_reqwest(error: reqwest::Error) -> HaError {
     HaError::Protocol(short(&chain))
 }
 
-/// Tronque un message d'erreur pour le journal.
+/// Truncates an error message for the log.
 pub(crate) fn short(text: &str) -> String {
     let text = text.trim();
     let mut out: String = text.chars().take(200).collect();

@@ -1,4 +1,4 @@
-//! Démon (acteur + tâches d'écran + persistance) sur matériel factice, temps virtuel.
+//! Daemon (actor + display tasks + persistence) on fake hardware, virtual time.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -223,7 +223,7 @@ async fn presets_are_case_insensitive_and_errors_list_the_choices() {
     else {
         panic!("erreur attendue : preset inconnu");
     };
-    // Le démon envoie une clé + arguments ; le client la traduit.
+    // The daemon sends a key + arguments; the client translates it.
     let message = ha2lux_i18n::wire::localize(&message);
     for expected in ["Night=30", "Day=80", "Presentation=100"] {
         assert!(message.contains(expected), "{message}");
@@ -293,7 +293,7 @@ async fn range_is_normalized_applied_and_persisted_with_a_backup_of_the_original
 async fn state_is_written_after_a_debounce_not_on_every_change() {
     let (rig, _) = rig_with_control(None, None).await;
     rig.advance(Duration::from_secs(2)).await;
-    wait_file(&rig.paths.state_file, |t| t.contains("master = 50")).await; // maître reconstruit au démarrage
+    wait_file(&rig.paths.state_file, |t| t.contains("master = 50")).await; // master rebuilt at startup
     rig.ok(Request::SetMaster(40)).await;
     rig.advance(Duration::from_millis(900)).await;
     assert!(
@@ -306,7 +306,7 @@ async fn state_is_written_after_a_debounce_not_on_every_change() {
         rig.ok(Request::SetMaster(level)).await;
         rig.advance(Duration::from_millis(300)).await;
     }
-    // Chaque changement repousse l'écriture de ≥ 1 s : rafale = une seule écriture finale.
+    // Each change pushes the write back by ≥ 1 s: burst = a single final write.
     assert!(
         std::fs::read_to_string(&rig.paths.state_file)
             .unwrap()
@@ -320,7 +320,7 @@ async fn state_is_written_after_a_debounce_not_on_every_change() {
 async fn restart_keeps_the_state_and_restores_the_master_on_the_screens() {
     let (mut rig, control) = rig_with_control(None, None).await;
     rig.ok(Request::SetMaster(33)).await;
-    control.set_raw(100); // l'écran s'est remis à 100 % pendant l'arrêt
+    control.set_raw(100); // the display reset to 100 % during shutdown
     rig.restart().await;
     assert_eq!(
         rig.handle.snapshot().master,
@@ -338,7 +338,7 @@ async fn restart_keeps_the_state_and_restores_the_master_on_the_screens() {
 async fn shutdown_flushes_pending_state_immediately() {
     let (rig, _) = rig_with_control(None, None).await;
     rig.ok(Request::SetMaster(61)).await;
-    let (paths, _dir, _) = rig.shutdown().await; // moins d'une seconde plus tard : écriture « à l'arrêt propre »
+    let (paths, _dir, _) = rig.shutdown().await; // less than a second later: "clean shutdown" write
     let text = std::fs::read_to_string(&paths.state_file).unwrap();
     assert!(text.contains("master = 61"), "{text}");
 }
@@ -370,13 +370,13 @@ async fn t_cfg_11_reload_with_invalid_file_keeps_the_old_config() {
     let broken = std::fs::read(&rig.paths.config_file).unwrap();
     let error = rig.ask(Request::Reload).await.unwrap_err();
     assert!(matches!(error, ApiError::ConfigInvalid(_)), "{error:?}");
-    // L'ancienne configuration est toujours active, le fichier n'est pas touché.
+    // The old configuration is still active, the file is untouched.
     rig.ok(Request::ApplyPreset("zen".into())).await;
     assert_eq!(rig.handle.snapshot().master, Some(12));
     assert_eq!(std::fs::read(&rig.paths.config_file).unwrap(), broken);
     assert_ne!(before, broken);
     assert!(rig.handle.snapshot().config_error.is_none());
-    // Corrigé puis rechargé : la nouvelle configuration prend effet.
+    // Fixed then reloaded: the new configuration takes effect.
     write_file(&rig.paths.config_file, "[presets]\nCalm = 22\n");
     rig.ok(Request::Reload).await;
     rig.ok(Request::ApplyPreset("calm".into())).await;
@@ -405,7 +405,7 @@ async fn invalid_config_at_startup_runs_with_defaults_and_never_overwrites_the_f
     let broken = "[general\nstep = ";
     let (rig, _) = rig_with_control(Some(broken), None).await;
     assert!(rig.handle.snapshot().config_error.is_some());
-    rig.ok(Request::ApplyPreset("night".into())).await; // valeurs par défaut en mémoire
+    rig.ok(Request::ApplyPreset("night".into())).await; // default values in memory
     rig.ok(Request::SetRange {
         id: "A".into(),
         low: 10,
@@ -557,11 +557,11 @@ async fn repeated_write_failures_make_the_display_unavailable() {
         let _ = rig.ask(Request::SetMaster(level)).await;
         rig.advance(Duration::from_secs(10)).await;
     }
-    // L'écran ne répond plus du tout (la sonde du rescan ciblé échoue aussi).
+    // The display no longer responds at all (the targeted rescan probe fails too).
     hardware.set_responding("A", false);
     let _ = rig.ask(Request::SetMaster(62)).await;
     rig.advance(Duration::from_secs(10)).await;
-    // Liste « vide » rejetée à 2, 5, 10, 20 s, puis acceptée : l'écran devient indisponible.
+    // "Empty" list rejected at 2, 5, 10, 20 s, then accepted: the display becomes unavailable.
     rig.advance(Duration::from_secs(60)).await;
     let displays = list(&rig).await;
     assert_eq!(displays[0].state, "unavailable", "{displays:?}");
@@ -574,7 +574,7 @@ async fn repeated_write_failures_make_the_display_unavailable() {
     };
     assert!(status.writes_failed >= 1, "{status:?}");
     assert!(status.last_error.is_some());
-    // L'écran revient : il redevient contrôlable et reçoit seul le maître.
+    // The display comes back: it becomes controllable again and alone receives the master.
     hardware.set_responding("A", true);
     control.fail_always(None);
     rig.ok(Request::Rescan).await;
@@ -590,7 +590,7 @@ async fn repeated_write_failures_make_the_display_unavailable() {
 #[tokio::test(start_paused = true)]
 async fn planning_wins_over_a_stale_persisted_master_at_startup() {
     let (rig, control) = rig_with_control(Some(PLANNING_CONFIG), Some("master = 10\n")).await;
-    // 14:00, points 08:00=80 et 20:00=20 : valeur du planning = 50.
+    // 14:00, points 08:00=80 and 20:00=20: schedule value = 50.
     assert_eq!(control.raw(), 50);
     assert_eq!(rig.handle.snapshot().mode, "planning");
     assert_eq!(rig.handle.snapshot().master, Some(50));
@@ -643,7 +643,7 @@ async fn idle_dim_and_restore_through_system_events() {
 async fn wake_rescans_and_reapplies_twice() {
     let (rig, control) = rig_with_control(None, None).await;
     rig.ok(Request::SetMaster(45)).await;
-    control.set_raw(100); // l'écran se remet à 100 % au réveil
+    control.set_raw(100); // the display resets to 100 % on wake
     rig.handle.send_event(Event::Wake).await.unwrap();
     rig.advance(Duration::from_millis(1_600)).await;
     assert_eq!(
@@ -651,7 +651,7 @@ async fn wake_rescans_and_reapplies_twice() {
         45,
         "ré-application immédiate après la liste acceptée"
     );
-    control.set_raw(100); // certains écrans se remettent à 100 % après le premier réglage
+    control.set_raw(100); // some displays reset to 100 % after the first setting
     rig.advance(Duration::from_millis(3_100)).await;
     assert_eq!(control.raw(), 45, "seconde ré-application après ~3 s");
 }

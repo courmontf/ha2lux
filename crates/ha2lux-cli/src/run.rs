@@ -1,7 +1,7 @@
-//! Exécution d'une commande : appels au démon, rendu, code de sortie.
+//! Running a command: daemon calls, rendering, exit code.
 //!
-//! Aucune E/S ici hormis les appels au [`Daemon`] : le résultat est un [`Outcome`]
-//! (texte pour stdout et stderr, code de sortie), ce qui rend la logique testable.
+//! No I/O here besides calls to the [`Daemon`]: the result is an [`Outcome`]
+//! (text for stdout and stderr, exit code), which makes the logic testable.
 
 use std::time::Duration;
 
@@ -14,18 +14,18 @@ use crate::client::{Answer, Call, CallError, Daemon, Secret, StatusInfo};
 use crate::output;
 use crate::select::select;
 
-/// Résultat d'une commande.
+/// Result of a command.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Outcome {
-    /// Texte pour la sortie standard.
+    /// Text for standard output.
     pub stdout: String,
-    /// Texte pour la sortie d'erreur.
+    /// Text for standard error.
     pub stderr: String,
-    /// Code de sortie : 0 succès, 1 usage, 2 démon absent, 3 échec, 4 démon sans réponse.
+    /// Exit code: 0 success, 1 usage, 2 daemon absent, 3 failure, 4 daemon not answering.
     pub code: u8,
 }
 
-/// Ligne d'erreur pour stderr.
+/// Error line for stderr.
 fn error_line(message: &str) -> String {
     t!("cli-error", message = message) + "\n"
 }
@@ -57,7 +57,7 @@ impl Outcome {
         }
     }
 
-    /// Échec avec un message ; en mode JSON, l'erreur est renvoyée en JSON sur stdout.
+    /// Failure with a message; in JSON mode, the error is returned as JSON on stdout.
     fn fail(json: bool, code: u8, message: &str) -> Self {
         if json {
             let body = serde_json::json!({ "ok": false, "code": code, "error": message });
@@ -104,7 +104,7 @@ async fn status<D: Daemon>(daemon: &D, timeout: Duration) -> Result<StatusInfo, 
     }
 }
 
-/// Échec de sélection d'écran : message, puis la liste pour s'y retrouver.
+/// Display selection failure: message, then the list to help find one's way.
 fn selection_failure(json: bool, message: &str, list: &[DisplayDto]) -> Outcome {
     let mut outcome = Outcome::fail(json, 3, message);
     if !json {
@@ -117,7 +117,7 @@ fn selection_failure(json: bool, message: &str, list: &[DisplayDto]) -> Outcome 
     outcome
 }
 
-/// Résout `--display` ; `Ok(None)` sans option.
+/// Resolves `--display`; `Ok(None)` without the option.
 async fn resolve<D: Daemon>(
     daemon: &D,
     timeout: Duration,
@@ -235,12 +235,12 @@ async fn toggle<D: Daemon>(
     outcome
 }
 
-/// Exécute `cli` contre `daemon`, chaque appel étant borné par `timeout`.
+/// Runs `cli` against `daemon`, each call being bounded by `timeout`.
 pub async fn execute<D: Daemon>(cli: &Cli, daemon: &D, timeout: Duration) -> Outcome {
     execute_with_input(cli, daemon, timeout, &read_token_from_stdin).await
 }
 
-/// Lit le jeton sur l'entrée standard : une ligne, 4 Kio au plus.
+/// Reads the token from standard input: one line, 4 KiB at most.
 fn read_token_from_stdin() -> std::io::Result<String> {
     use std::io::{BufRead, Read};
     let mut text = String::new();
@@ -248,7 +248,7 @@ fn read_token_from_stdin() -> std::io::Result<String> {
     Ok(text)
 }
 
-/// Comme [`execute`], avec la source du jeton (entrée standard en production).
+/// Like [`execute`], with the token source (standard input in production).
 pub async fn execute_with_input<D: Daemon>(
     cli: &Cli,
     daemon: &D,
@@ -417,7 +417,7 @@ pub async fn execute_with_input<D: Daemon>(
     }
 }
 
-/// `ha2lux doctor` : autonome, ne passe pas par le démon.
+/// `ha2lux doctor`: standalone, does not go through the daemon.
 async fn doctor(json: bool, probe: bool) -> Outcome {
     use ha2lux_backends::doctor::{DoctorOptions, run};
     let report = run(&DoctorOptions::system(probe)).await;

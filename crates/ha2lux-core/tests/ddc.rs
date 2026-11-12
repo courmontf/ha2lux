@@ -1,4 +1,4 @@
-//! Trames DDC/CI : encodage, analyse, cas d'erreur.
+//! DDC/CI frames: encoding, parsing, error cases.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::ddc::{
     DdcError, VCP_BRIGHTNESS, decode_request, encode_get_vcp, encode_get_vcp_reply,
@@ -6,7 +6,7 @@ use ha2lux_core::ddc::{
 };
 use proptest::prelude::*;
 
-/// Recalcule la somme de contrôle d'une réponse (graine 0x50) après modification.
+/// Recomputes a response's checksum (seed 0x50) after modification.
 fn fix_reply_checksum(frame: &mut [u8]) {
     let n = frame.len() - 1;
     frame[n] = frame[..n].iter().fold(0x50, |a, b| a ^ b);
@@ -37,7 +37,7 @@ fn set_vcp_request_matches_hand_computed_frame() {
 
 #[test]
 fn parses_a_hand_built_reply() {
-    // max 100, courant 50 ; 0x50 ^ (6E 88 02 00 10 00 00 64 00 32) = 0xF2
+    // max 100, current 50; 0x50 ^ (6E 88 02 00 10 00 00 64 00 32) = 0xF2
     let reply = [
         0x6E, 0x88, 0x02, 0x00, 0x10, 0x00, 0x00, 0x64, 0x00, 0x32, 0xF2,
     ];
@@ -79,7 +79,7 @@ fn corrupted_checksum_is_rejected() {
         Err(DdcError::BadChecksum)
     );
     let mut frame = encode_get_vcp_reply(0x10, 50, 100);
-    frame[8] ^= 0x01; // donnée altérée, somme inchangée
+    frame[8] ^= 0x01; // data altered, checksum unchanged
     assert_eq!(
         parse_get_vcp_reply(&frame, 0x10),
         Err(DdcError::BadChecksum)
@@ -120,7 +120,7 @@ fn reply_for_another_vcp_is_rejected() {
 #[test]
 fn unsupported_vcp_is_not_transient() {
     let mut frame = encode_get_vcp_reply(0x10, 50, 100);
-    frame[3] = 0x01; // code de résultat « non pris en charge »
+    frame[3] = 0x01; // result code "not supported"
     fix_reply_checksum(&mut frame);
     let error = parse_get_vcp_reply(&frame, 0x10).unwrap_err();
     assert_eq!(error, DdcError::UnsupportedVcp);

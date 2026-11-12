@@ -1,6 +1,6 @@
-//! Backends matériels de ha2lux : DDC/CI, backlight, backend factice, et la
-//! tâche d'écran qui les pilote.
-// Aucun `unsafe` n'est nécessaire : il est interdit (accès I²C par `read`/`write` sur le fichier).
+//! Hardware backends of ha2lux: DDC/CI, backlight, mock backend, and the
+//! display task that drives them.
+// No `unsafe` is needed: it is forbidden (I²C access through `read`/`write` on the file).
 #![forbid(unsafe_code)]
 
 pub mod any;

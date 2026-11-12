@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Avertit (sans bloquer) si le message de commit ne suit pas Conventional Commits :
-#   type(portée)!: description      types : feat, fix, perf, docs, refactor, test, build, ci, chore, style, i18n
-# `scripts/release.sh` en déduit la prochaine version (feat -> mineur, fix/perf -> patch, ! -> incompatible).
+# Warns (without blocking) if the commit message does not follow Conventional Commits:
+#   type(scope)!: description      types: feat, fix, perf, docs, refactor, test, build, ci, chore, style, i18n
+# `scripts/release.sh` derives the next version from it (feat -> minor, fix/perf -> patch, ! -> breaking).
 set -euo pipefail
 subject=$(head -n1 "$1")
 case "$subject" in

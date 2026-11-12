@@ -1,4 +1,4 @@
-//! Fichier d'état : lecture tolérante, aller-retour, rien d'éphémère.
+//! State file: tolerant reading, round trip, nothing ephemeral.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::config::ConfigError;
 use ha2lux_core::{Curve, LearnPolicy, MinuteOfDay, State, Suspension};

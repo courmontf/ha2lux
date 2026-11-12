@@ -1,19 +1,19 @@
-//! Requêtes acceptées par le démon, réponses et erreurs.
+//! Requests accepted by the daemon, responses and errors.
 //!
-//! **Toute valeur est validée ici**, dans le démon, avant d'atteindre la
-//! machine d'états : la validation côté client (CLI, tray) n'est qu'un confort.
+//! **Every value is validated here**, in the daemon, before reaching the
+//! state machine: client-side validation (CLI, tray) is only a convenience.
 
 use ha2lux_core::{ControlError, DisplayId};
 use ha2lux_i18n::wire;
 use ha2lux_ipc::{DaemonError, DisplayDto};
 use thiserror::Error;
 
-/// Longueur maximale d'un identifiant d'écran.
+/// Maximum length of a display identifier.
 pub const MAX_DISPLAY_ID: usize = 255;
-/// Longueur maximale d'un nom de preset.
+/// Maximum length of a preset name.
 pub const MAX_PRESET_NAME: usize = 63;
 
-/// Jeton transmis au démon : son `Debug` ne le montre jamais.
+/// Token passed to the daemon: its `Debug` never shows it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Secret(pub String);
 
@@ -23,180 +23,180 @@ impl std::fmt::Debug for Secret {
     }
 }
 
-/// Requête adressée au démon.
+/// Request addressed to the daemon.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Request {
-    /// Niveau maître 0-100.
+    /// Master level 0-100.
     SetMaster(u32),
-    /// Variation du maître.
+    /// Master change.
     StepMaster(i32),
-    /// Niveau direct d'un écran.
+    /// Direct level of a display.
     SetDisplay {
-        /// Identité de l'écran.
+        /// Display identity.
         id: String,
-        /// Niveau 0-100.
+        /// Level 0-100.
         level: u32,
     },
-    /// Plage d'un écran.
+    /// Range of a display.
     SetRange {
-        /// Identité de l'écran.
+        /// Display identity.
         id: String,
-        /// Borne basse (≤ 100).
+        /// Lower bound (<= 100).
         low: u32,
-        /// Borne haute (≤ 100).
+        /// Upper bound (<= 100).
         high: u32,
     },
-    /// Preset par nom.
+    /// Preset by name.
     ApplyPreset(String),
-    /// Active ou désactive une fonction.
+    /// Enables or disables a feature.
     SetMode {
-        /// `schedule`, `idle-dim` ou `auto`.
+        /// `schedule`, `idle-dim` or `auto`.
         feature: String,
-        /// Nouvel état.
+        /// New state.
         on: bool,
     },
-    /// Relance l'énumération.
+    /// Restarts the enumeration.
     Rescan,
-    /// L'interface interactive (popup du tray) est ouverte ou fermée : les relances
-    /// périodiques des écrans indisponibles sont reportées tant qu'elle est ouverte.
+    /// The interactive UI (tray popup) is open or closed: periodic retries
+    /// of unavailable displays are postponed while it is open.
     SetUiOpen(bool),
-    /// Recharge la configuration.
+    /// Reloads the configuration.
     Reload,
-    /// Oublie la courbe apprise.
+    /// Forgets the learned curve.
     ResetCurve,
-    /// Annule le dernier apprentissage.
+    /// Cancels the last learning step.
     UndoLearn,
-    /// Enregistre le jeton Home Assistant de l'URL configurée.
+    /// Stores the Home Assistant token for the configured URL.
     SetToken(Secret),
-    /// Supprime le jeton Home Assistant de l'URL configurée.
+    /// Deletes the Home Assistant token for the configured URL.
     ClearToken,
-    /// Liste les capteurs d'éclairement de Home Assistant.
+    /// Lists the Home Assistant illuminance sensors.
     ListSensors,
-    /// Presets (nom, niveau).
+    /// Presets (name, level).
     Presets,
-    /// Liste des écrans.
+    /// List of displays.
     List,
-    /// État détaillé.
+    /// Detailed state.
     Status,
-    /// Arrêt propre.
+    /// Clean shutdown.
     Quit,
 }
 
-/// Réponse à une requête.
+/// Response to a request.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Reply {
-    /// Commande exécutée.
+    /// Command executed.
     Done,
-    /// Liste des écrans.
+    /// List of displays.
     List(Vec<DisplayDto>),
-    /// Presets (nom, niveau), dans l'ordre de la configuration.
+    /// Presets (name, level), in configuration order.
     Presets(Vec<(String, u32)>),
-    /// Capteurs d'éclairement : (entité, nom, pièce).
+    /// Illuminance sensors: (entity, name, room).
     Sensors(Vec<(String, String, String)>),
-    /// État détaillé.
+    /// Detailed state.
     Status(Box<StatusSnapshot>),
 }
 
-/// Instantané de l'état du démon (publié après chaque message traité).
+/// Snapshot of the daemon state (published after each processed message).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StatusSnapshot {
-    /// Version du démon.
+    /// Daemon version.
     pub version: String,
-    /// Maître courant.
+    /// Current master.
     pub master: Option<u8>,
-    /// Source de base : `auto-lux`, `planning` ou `static`.
+    /// Base source: `auto-lux`, `planning` or `static`.
     pub mode: String,
-    /// Pas par défaut de `up`/`down` (réglage `general.step`).
+    /// Default step of `up`/`down` (`general.step` setting).
     pub step: u8,
-    /// Planning activé.
+    /// Schedule enabled.
     pub schedule_enabled: bool,
-    /// Nombre de points du planning.
+    /// Number of schedule points.
     pub schedule_points: u32,
-    /// Planning suspendu : heure de reprise `HH:MM`.
+    /// Schedule suspended: resume time `HH:MM`.
     pub schedule_resume: Option<String>,
-    /// Atténuation d'inactivité activée.
+    /// Idle dimming enabled.
     pub idle_enabled: bool,
-    /// Niveau d'atténuation (0-100).
+    /// Dimming level (0-100).
     pub idle_level: u8,
-    /// Délai d'inactivité avant atténuation, en minutes.
+    /// Idle delay before dimming, in minutes.
     pub idle_minutes: u16,
-    /// Atténuation en cours.
+    /// Dimming in progress.
     pub dimmed: bool,
-    /// Auto-luminosité activée.
+    /// Auto-brightness enabled.
     pub auto_enabled: bool,
-    /// Auto-luminosité configurée (URL, jeton et entité).
+    /// Auto-brightness configured (URL, token and entity).
     pub auto_configured: bool,
-    /// Santé Home Assistant.
+    /// Home Assistant health.
     pub ha_health: String,
-    /// Dernier état brut lu sur Home Assistant.
+    /// Last raw state read from Home Assistant.
     pub ha_raw: Option<String>,
-    /// Flux WebSocket actif.
+    /// Active WebSocket stream.
     pub ha_websocket: bool,
-    /// Le jeton est refusé par Home Assistant.
+    /// The token is rejected by Home Assistant.
     pub ha_auth_rejected: bool,
-    /// Un jeton est enregistré pour l'URL configurée.
+    /// A token is stored for the configured URL.
     pub ha_token_present: bool,
-    /// Lux lissé (mesure suivie par le filtre).
+    /// Smoothed lux (measurement tracked by the filter).
     pub lux_smoothed: Option<f64>,
-    /// Lux le plus récent.
+    /// Most recent lux.
     pub lux_latest: Option<f64>,
-    /// Un changement de lumière est en cours de confirmation ou de rampe.
+    /// A light change is being confirmed or ramped.
     pub auto_adjusting: bool,
-    /// Niveau visé par la courbe pour le lux lissé.
+    /// Level targeted by the curve for the smoothed lux.
     pub auto_target: Option<u8>,
-    /// Courbe utilisée (lux, niveau).
+    /// Curve in use (lux, level).
     pub curve: Vec<(f64, u8)>,
-    /// La courbe est celle par défaut.
+    /// The curve is the default one.
     pub curve_default: bool,
-    /// Cible de rampe en cours.
+    /// Current ramp target.
     pub ramp_target: Option<u8>,
-    /// Configuration illisible : message (la configuration précédente est gardée).
+    /// Unreadable configuration: message (the previous configuration is kept).
     pub config_error: Option<String>,
-    /// Écrans connus.
+    /// Known displays.
     pub displays: Vec<DisplayDto>,
-    /// Écritures matérielles réussies.
+    /// Successful hardware writes.
     pub writes_ok: u64,
-    /// Écritures définitivement échouées.
+    /// Permanently failed writes.
     pub writes_failed: u64,
-    /// Nouvelles tentatives effectuées.
+    /// Retries performed.
     pub retries: u64,
-    /// Opérations matérielles abandonnées (timeout).
+    /// Hardware operations abandoned (timeout).
     pub abandoned_ops: u32,
-    /// Dernière erreur matérielle.
+    /// Last hardware error.
     pub last_error: Option<String>,
 }
 
-/// Erreur d'exécution d'une requête.
+/// Request execution error.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ApiError {
-    /// Argument mal formé.
+    /// Malformed argument.
     #[error("{0}")]
     InvalidArgs(String),
-    /// Valeur hors bornes.
+    /// Value out of bounds.
     #[error("{0}")]
     OutOfRange(String),
-    /// Écran inconnu.
+    /// Unknown display.
     #[error("unknown display: {0}")]
     UnknownDisplay(String),
-    /// Écran indisponible.
+    /// Unavailable display.
     #[error("display unavailable: {0}")]
     DisplayUnavailable(String),
-    /// Aucun écran contrôlable.
+    /// No controllable display.
     #[error("no controllable display")]
     NoControllableDisplay,
-    /// Preset inconnu ; le message liste les presets disponibles.
+    /// Unknown preset; the message lists the available presets.
     #[error("{0}")]
     UnknownPreset(String),
-    /// Fonction non configurée.
+    /// Feature not configured.
     #[error("{0}")]
     NotConfigured(String),
-    /// Configuration invalide (l'ancienne est conservée).
+    /// Invalid configuration (the old one is kept).
     #[error("{0}")]
     ConfigInvalid(String),
-    /// Échec d'un accès au trousseau ou à Home Assistant.
+    /// Failure accessing the keyring or Home Assistant.
     #[error("{0}")]
     Failed(String),
-    /// Le démon s'arrête ou ne répond plus.
+    /// The daemon is shutting down or no longer responds.
     #[error("the daemon is stopped")]
     Stopped,
 }
@@ -217,8 +217,8 @@ impl From<ControlError> for ApiError {
 
 impl From<ApiError> for DaemonError {
     fn from(error: ApiError) -> Self {
-        // Les messages sont envoyés sous forme de clé + arguments : chaque client
-        // les traduit dans sa langue (voir `ha2lux_i18n::wire`).
+        // Messages are sent as key + arguments: each client
+        // translates them into its own language (see `ha2lux_i18n::wire`).
         match error {
             ApiError::InvalidArgs(text) => Self::InvalidArgs(text),
             ApiError::OutOfRange(text) => Self::OutOfRange(text),
@@ -240,7 +240,7 @@ impl From<ApiError> for DaemonError {
     }
 }
 
-/// Valide une valeur 0-100.
+/// Validates a 0-100 value.
 pub fn percent(what: &str, value: u32) -> Result<i64, ApiError> {
     if value <= 100 {
         Ok(i64::from(value))
@@ -252,7 +252,7 @@ pub fn percent(what: &str, value: u32) -> Result<i64, ApiError> {
     }
 }
 
-/// Valide un identifiant d'écran reçu d'un client.
+/// Validates a display identifier received from a client.
 pub fn display_id(id: &str) -> Result<DisplayId, ApiError> {
     if id.is_empty() || id.chars().count() > MAX_DISPLAY_ID || id.chars().any(char::is_control) {
         return Err(ApiError::InvalidArgs(wire::encode(
@@ -263,7 +263,7 @@ pub fn display_id(id: &str) -> Result<DisplayId, ApiError> {
     Ok(DisplayId::new(id))
 }
 
-/// Valide un nom de preset reçu d'un client.
+/// Validates a preset name received from a client.
 pub fn preset_name(name: &str) -> Result<&str, ApiError> {
     if name.is_empty()
         || name.chars().count() > MAX_PRESET_NAME

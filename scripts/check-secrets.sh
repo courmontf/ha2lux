@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Détecte les fuites probables (secrets, données personnelles) dans les fichiers donnés.
-# Usage : scripts/check-secrets.sh <fichier>...     (sans argument : tous les fichiers suivis par git)
-# Code de sortie : 0 rien trouvé, 1 fuite probable.
-# Pour ignorer une ligne précise (faux positif volontaire, ex. jeton factice de test) :
-# ajouter « # secret-scan: ok » (ou le commentaire équivalent) sur la même ligne.
+# Detects likely leaks (secrets, personal data) in the given files.
+# Usage: scripts/check-secrets.sh <file>...     (no argument: every file tracked by git)
+# Exit code: 0 nothing found, 1 likely leak.
+# To ignore a specific line (deliberate false positive, e.g. a fake test token):
+# add "# secret-scan: ok" (or the equivalent comment) on the same line.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -13,7 +13,7 @@ else
     mapfile -t files < <(git ls-files 2>/dev/null)
 fi
 
-# Expressions à signaler (ERE). Chaque entrée : « nom|expression ».
+# Patterns to flag (ERE). Each entry: "name|expression".
 patterns=(
     'clé privée|-----BEGIN [A-Z ]*PRIVATE KEY-----'
     'jeton JWT (Home Assistant, etc.)|eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}'
@@ -23,7 +23,7 @@ patterns=(
     'chemin personnel|/home/[a-z][a-z0-9_-]*/'
     'adresse e-mail|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}'
 )
-# Valeurs tolérées : exemples génériques et adresses « noreply ».
+# Tolerated values: generic examples and "noreply" addresses.
 allow='/home/(u|alice|user|name|example)/|user:pw@|noreply|@example\.(com|org|net)|@(localhost|users\.noreply)|name@host|@types/'
 
 status=0

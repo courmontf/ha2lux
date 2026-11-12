@@ -1,4 +1,4 @@
-//! Sondes de blocage : analyseurs purs, faux services D-Bus, faux /proc, pw-dump réel.
+//! Blocker probes: pure parsers, fake D-Bus services, fake /proc, real pw-dump.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::io::{BufRead, BufReader};
@@ -24,7 +24,7 @@ fn inhibitor(
 
 #[test]
 fn logind_only_idle_block_inhibitors_count() {
-    // Liste relevée sur un poste KDE réel : aucun n'est un inhibiteur d'inactivité.
+    // List captured on a real KDE machine: none is an idle inhibitor.
     let real = vec![
         inhibitor(
             "sleep",
@@ -118,7 +118,7 @@ fn pipewire_dump_detects_microphone_and_camera_in_use() {
         node("Video/Source", "running", ""),
     ]));
     assert_eq!(both, ["microphone in use", "camera in use"]);
-    // Lecture de musique (sortie) : pas un blocage.
+    // Music playback (output): not a blocker.
     assert!(
         parse_pw_dump(&dump(&[
             node("Stream/Output/Audio", "running", ""),
@@ -126,7 +126,7 @@ fn pipewire_dump_detects_microphone_and_camera_in_use() {
         ]))
         .is_empty()
     );
-    // Vumètre qui écoute le moniteur d'une sortie : pas le microphone.
+    // Level meter listening to an output's monitor: not the microphone.
     assert!(
         parse_pw_dump(&dump(&[node(
             "Stream/Input/Audio",
@@ -190,8 +190,8 @@ fn camera_opened_directly_through_v4l2_is_detected_from_proc() {
     make(100, "firefox", &["/dev/pts/0", "/home/u/x.txt"]);
     make(200, "obs", &["/dev/video0", "/dev/null"]);
     make(300, "zoom", &["/dev/video1"]);
-    make(42, "ha2luxd", &["/dev/video0"]); // nous-mêmes : ignoré
-    std::fs::create_dir_all(proc.path().join("self")).unwrap(); // entrée non numérique
+    make(42, "ha2luxd", &["/dev/video0"]); // ourselves: ignored
+    std::fs::create_dir_all(proc.path().join("self")).unwrap(); // non-numeric entry
     std::fs::write(proc.path().join("version"), "x").unwrap();
     assert_eq!(
         scan_video_users(proc.path(), 42),
@@ -240,7 +240,7 @@ impl PrivateBus {
 
 impl Drop for PrivateBus {
     fn drop(&mut self) {
-        // Le bus privé n'a plus d'utilité ; une erreur ici n'a aucune conséquence.
+        // The private bus is no longer needed; an error here has no consequence.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -392,7 +392,7 @@ async fn missing_services_are_silently_ignored() {
 
 #[tokio::test]
 async fn pw_dump_output_is_parsed_from_a_real_process() {
-    // Faux `pw-dump` : un script qui affiche un microphone actif (sans toucher au vrai PipeWire).
+    // Fake `pw-dump`: a script that prints an active microphone (without touching the real PipeWire).
     let dir = TempDir::new().unwrap();
     let script = dir.path().join("pw-dump");
     std::fs::write(
@@ -455,7 +455,7 @@ async fn mutter_absent_gives_no_value() {
     assert_eq!(idle.idle_ms().await, None);
 }
 
-/// `pw-dump` réel de la session (lecture seule) : le résultat doit être cohérent, sans panique.
+/// The session's real `pw-dump` (read-only): the result must be consistent, with no panic.
 #[tokio::test]
 async fn the_real_pw_dump_if_present_is_parsed_without_error() {
     let Ok(output) = tokio::process::Command::new("pw-dump").output().await else {

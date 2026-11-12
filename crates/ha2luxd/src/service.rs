@@ -1,10 +1,10 @@
-//! Service : connexion au bus, instance unique avec remplacement, cycle de vie.
+//! Service: bus connection, single instance with takeover, lifecycle.
 //!
-//! **Jamais deux démons sur un bus DDC.** Un nouveau démon qui trouve le nom
-//! déjà pris demande à l'ancien de quitter (`Quit`), attend qu'il libère le nom
-//! (au plus [`TAKEOVER_TIMEOUT`]), et **refuse de démarrer** s'il ne le fait pas.
-//! L'ancien libère le nom seulement après avoir arrêté ses tâches d'écran et
-//! écrit son état : les deux démons ne pilotent donc jamais le matériel en même temps.
+//! **Never two daemons on a DDC bus.** A new daemon that finds the name
+//! already taken asks the old one to quit (`Quit`), waits for it to release the name
+//! (at most [`TAKEOVER_TIMEOUT`]), and **refuses to start** if it does not.
+//! The old one releases the name only after stopping its display tasks and
+//! writing its state: the two daemons therefore never drive the hardware at the same time.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -27,40 +27,40 @@ use crate::paths::Paths;
 use crate::system::{poll_connectors, watch_logind, watch_uevents};
 use crate::wayland::WaylandIdle;
 
-/// Délai accordé à l'ancienne instance pour libérer le nom.
+/// Time granted to the old instance to release the name.
 pub const TAKEOVER_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Bus sur lequel se connecter.
+/// Bus to connect to.
 #[derive(Clone, Debug)]
 pub enum BusKind {
-    /// Bus de session de l'utilisateur.
+    /// The user's session bus.
     Session,
-    /// Bus système (logind).
+    /// System bus (logind).
     System,
-    /// Adresse explicite (bus privé des tests).
+    /// Explicit address (private bus for tests).
     Address(String),
 }
 
-/// Sources d'événements système à surveiller.
+/// System event sources to watch.
 #[derive(Clone, Debug, Default)]
 pub struct SystemOptions {
-    /// Bus sur lequel écouter logind (veille, réveil, verrouillage, session active).
+    /// Bus on which to listen to logind (sleep, wake-up, lock, active session).
     pub logind_bus: Option<BusKind>,
-    /// Identifiant de session logind (`XDG_SESSION_ID`).
+    /// logind session identifier (`XDG_SESSION_ID`).
     pub session_id: Option<String>,
-    /// Écouter les événements du noyau (hotplug d'écrans) par netlink.
+    /// Listen to kernel events (display hotplug) through netlink.
     pub netlink: bool,
-    /// Répertoire DRM sondé périodiquement si netlink est indisponible.
+    /// DRM directory polled periodically if netlink is unavailable.
     pub poll_dir: Option<std::path::PathBuf>,
 }
 
 impl SystemOptions {
-    /// Aucune source (tests).
+    /// No source (tests).
     pub fn none() -> Self {
         Self::default()
     }
 
-    /// Sources de production : logind sur le bus système, netlink, repli par sondage de sysfs.
+    /// Production sources: logind on the system bus, netlink, fallback by polling sysfs.
     pub fn production() -> Self {
         Self {
             logind_bus: Some(BusKind::System),
@@ -75,49 +75,49 @@ impl SystemOptions {
     }
 }
 
-/// Échecs du service.
+/// Service failures.
 #[derive(Debug, Error)]
 pub enum ServiceError {
-    /// Erreur D-Bus.
+    /// D-Bus error.
     #[error("D-Bus : {0}")]
     Bus(#[from] zbus::Error),
-    /// Erreur D-Bus de bas niveau.
+    /// Low-level D-Bus error.
     #[error("D-Bus : {0}")]
     Fdo(#[from] zbus::fdo::Error),
-    /// Impossible de prendre la place de l'ancienne instance.
+    /// Unable to take the old instance's place.
     #[error("{0}")]
     Takeover(String),
-    /// Démarrage du démon impossible.
+    /// Unable to start the daemon.
     #[error("startup failed: {0}")]
     Start(#[from] StartError),
 }
 
-/// Sources de l'atténuation à l'inactivité.
+/// Sources for idle dimming.
 #[derive(Clone, Debug, Default)]
 pub struct IdleOptions {
-    /// Utiliser le protocole Wayland `ext-idle-notify-v1`.
+    /// Use the Wayland protocol `ext-idle-notify-v1`.
     pub wayland: bool,
-    /// Repli : lire l'inactivité chez GNOME Mutter par le bus de session.
+    /// Fallback: read idle time from GNOME Mutter over the session bus.
     pub mutter: bool,
-    /// Bus système pour les inhibiteurs logind.
+    /// System bus for the logind inhibitors.
     pub system_bus: Option<BusKind>,
-    /// Interroger les inhibiteurs du bureau (bus de session).
+    /// Query the desktop inhibitors (session bus).
     pub desktop_inhibitors: bool,
-    /// Interroger PipeWire (`pw-dump`) : microphone et caméra.
+    /// Query PipeWire (`pw-dump`): microphone and camera.
     pub pipewire: bool,
-    /// Répertoire `/proc` parcouru pour les caméras V4L2 ouvertes.
+    /// `/proc` directory scanned for open V4L2 cameras.
     pub proc_dir: Option<std::path::PathBuf>,
-    /// Programme `pw-dump` (tests).
+    /// `pw-dump` program (tests).
     pub pw_dump: Option<std::path::PathBuf>,
 }
 
 impl IdleOptions {
-    /// Aucune source : l'atténuation n'a pas de quoi fonctionner (tests).
+    /// No source: dimming has nothing to work with (tests).
     pub fn none() -> Self {
         Self::default()
     }
 
-    /// Sources de production.
+    /// Production sources.
     pub fn production() -> Self {
         Self {
             wayland: std::env::var_os("WAYLAND_DISPLAY").is_some(),
@@ -135,34 +135,34 @@ impl IdleOptions {
     }
 }
 
-/// Réglages du service.
+/// Service settings.
 pub struct ServiceOptions {
-    /// Bus à utiliser.
+    /// Bus to use.
     pub bus: BusKind,
-    /// Fichiers de configuration et d'état.
+    /// Configuration and state files.
     pub paths: Paths,
-    /// Source d'écrans.
+    /// Display source.
     pub hardware: Arc<dyn Hardware>,
-    /// Horloge.
+    /// Clock.
     pub clock: Arc<dyn Clock + Send + Sync>,
-    /// Délai de prise de relais.
+    /// Takeover timeout.
     pub takeover_timeout: Duration,
-    /// Honorer `Quit` (faux : test d'une ancienne instance qui ne libère pas le nom).
+    /// Honor `Quit` (false: test of an old instance that does not release the name).
     pub honor_quit: bool,
-    /// Réglages de tâche d'écran imposés (tests).
+    /// Forced display-task settings (tests).
     pub task_config: Option<TaskConfig>,
-    /// Période d'évaluation du planning.
+    /// Schedule evaluation period.
     pub planning_tick: Duration,
-    /// Home Assistant (jeton et source) ; `None` : auto-luminosité indisponible.
+    /// Home Assistant (token and source); `None`: auto-brightness unavailable.
     pub ha: Option<crate::ha::HaDeps>,
-    /// Sources d'événements système.
+    /// System event sources.
     pub system: SystemOptions,
-    /// Sources de l'atténuation à l'inactivité.
+    /// Sources for idle dimming.
     pub idle: IdleOptions,
 }
 
 impl ServiceOptions {
-    /// Réglages de production.
+    /// Production settings.
     pub fn production(
         paths: Paths,
         hardware: Arc<dyn Hardware>,
@@ -196,8 +196,8 @@ async fn connect(bus: &BusKind) -> Result<zbus::Connection, ServiceError> {
     })
 }
 
-/// Obtient le droit d'être l'unique instance : demande à l'ancienne de quitter et
-/// attend la libération du nom, ou échoue.
+/// Obtains the right to be the single instance: asks the old one to quit and
+/// waits for the name to be released, or fails.
 async fn make_room(connection: &zbus::Connection, timeout: Duration) -> Result<(), ServiceError> {
     let dbus = DBusProxy::new(connection).await?;
     let name = zbus::names::BusName::try_from(BUS_NAME).map_err(zbus::Error::from)?;
@@ -206,7 +206,7 @@ async fn make_room(connection: &zbus::Connection, timeout: Duration) -> Result<(
     }
     tracing::info!("another instance is running: asking it to exit");
     let proxy = DaemonProxy::new(connection).await?;
-    // L'ancienne instance peut être figée ou d'une autre version : l'appel est borné.
+    // The old instance may be frozen or of another version: the call is bounded.
     match tokio::time::timeout(timeout, proxy.quit()).await {
         Ok(Ok(())) => {}
         Ok(Err(error)) => tracing::warn!(%error, "the exit request failed"),
@@ -225,7 +225,7 @@ async fn make_room(connection: &zbus::Connection, timeout: Duration) -> Result<(
     Ok(())
 }
 
-/// Fait vivre le démon jusqu'à `shutdown` ou jusqu'à une demande `Quit`.
+/// Runs the daemon until `shutdown` or until a `Quit` request.
 pub async fn run(
     options: ServiceOptions,
     shutdown: impl Future<Output = ()>,
@@ -276,8 +276,8 @@ pub async fn run(
         () = shutdown => tracing::info!("shutdown requested"),
         () = handle.wait_closed() => tracing::info!("shutdown requested over D-Bus (Quit)"),
     }
-    // État écrit et tâches d'écran arrêtées AVANT de libérer le nom : le successeur ne
-    // démarre qu'ensuite, donc jamais deux démons sur le matériel.
+    // State written and display tasks stopped BEFORE releasing the name: the successor
+    // only starts afterwards, hence never two daemons on the hardware.
     daemon.shutdown().await;
     if let Err(error) = connection.release_name(BUS_NAME).await {
         tracing::warn!(%error, "releasing the D-Bus name");
@@ -289,8 +289,8 @@ pub async fn run(
     Ok(())
 }
 
-/// Lance les surveillances système demandées ; une source indisponible est signalée
-/// dans le journal sans empêcher le démon de fonctionner.
+/// Launches the requested system watchers; an unavailable source is reported
+/// in the log without preventing the daemon from working.
 async fn spawn_system_sources(
     system: &SystemOptions,
     handle: &crate::actor::DaemonHandle,
@@ -325,8 +325,8 @@ async fn spawn_system_sources(
     tasks
 }
 
-/// Lance la supervision de l'atténuation : une source (Wayland, sinon Mutter) est ouverte
-/// quand la fonction est activée et relancée si le délai change ; désactivée, rien n'est ouvert.
+/// Launches the dimming supervision: a source (Wayland, otherwise Mutter) is opened
+/// when the feature is enabled and restarted if the delay changes; when disabled, nothing is opened.
 async fn spawn_idle(
     idle: &IdleOptions,
     session: &zbus::Connection,

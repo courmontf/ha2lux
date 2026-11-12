@@ -1,4 +1,4 @@
-//! T-AMB : courbe lux → maître (spec §8.4).
+//! T-AMB: lux → master curve (spec §8.4).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::Curve;
 use proptest::prelude::*;

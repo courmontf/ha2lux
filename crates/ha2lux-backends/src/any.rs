@@ -1,8 +1,8 @@
-//! Enveloppe de tous les backends d'affichage.
+//! Wrapper around all display backends.
 //!
-//! `DisplayBackend` renvoie des `impl Future` : il n'est pas utilisable comme
-//! objet dynamique. Cette énumération permet au démon de piloter des écrans
-//! hétérogènes (DDC/CI, backlight, factice) avec une seule tâche d'écran.
+//! `DisplayBackend` returns `impl Future`s: it cannot be used as a
+//! dynamic object. This enum lets the daemon drive heterogeneous displays
+//! (DDC/CI, backlight, mock) with a single display task.
 
 use ha2lux_core::{BackendError, DisplayBackend, DisplayInfo};
 
@@ -12,11 +12,11 @@ use crate::mock::MockBackend;
 
 /// Un backend d'affichage quelconque.
 pub enum AnyBackend {
-    /// Écran externe en DDC/CI.
+    /// External display over DDC/CI.
     Ddc(DdcBackend),
     /// Panneau interne via logind.
     Backlight(BacklightBackend<LogindSetter>),
-    /// Écran factice (tests).
+    /// Mock display (tests).
     Mock(MockBackend),
 }
 

@@ -1,7 +1,7 @@
-//! Backend factice : un écran en mémoire, scriptable, sans aucune E/S.
+//! Mock backend: an in-memory, scriptable display, with no I/O at all.
 //!
-//! Ses futures se terminent immédiatement ; elles peuvent donc être pilotées
-//! sans runtime dans les tests (voir `tests/support`).
+//! Its futures complete immediately; they can therefore be driven
+//! without a runtime in tests (see `tests/support`).
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -25,8 +25,8 @@ struct State {
     fail_always: Option<BackendError>,
 }
 
-/// Poignée de contrôle partagée avec le backend : sert à inspecter les
-/// écritures et à scripter des pannes depuis le test.
+/// Control handle shared with the backend: used to inspect
+/// writes and to script failures from the test.
 #[derive(Clone, Debug)]
 pub struct MockControl(Arc<Mutex<State>>);
 
@@ -35,60 +35,60 @@ fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
 }
 
 impl MockControl {
-    /// Valeurs brutes écrites avec succès, dans l'ordre.
+    /// Raw values written successfully, in order.
     pub fn writes(&self) -> Vec<u32> {
         lock(&self.0).writes.clone()
     }
 
-    /// Écritures réussies avec leur instant (horloge tokio, virtuelle sous `start_paused`).
+    /// Successful writes with their instant (tokio clock, virtual under `start_paused`).
     pub fn write_times(&self) -> Vec<(Instant, u32)> {
         lock(&self.0).write_times.clone()
     }
 
-    /// Nombre total de tentatives d'écriture, réussies ou non.
+    /// Total number of write attempts, successful or not.
     pub fn attempts(&self) -> u32 {
         lock(&self.0).attempts
     }
 
-    /// Ajoute une latence à chaque écriture (temps tokio).
+    /// Adds latency to each write (tokio time).
     pub fn set_latency(&self, latency: Duration) {
         lock(&self.0).latency = latency;
     }
 
-    /// Lectures et écritures ne se terminent jamais (écran qui bloque le noyau).
+    /// Reads and writes never complete (a display blocking the kernel).
     pub fn set_hang(&self, hang: bool) {
         lock(&self.0).hang = hang;
     }
 
-    /// Valeur brute courante de l'écran simulé.
+    /// Current raw value of the simulated display.
     pub fn raw(&self) -> u32 {
         lock(&self.0).raw
     }
 
-    /// Force la valeur brute courante (par exemple l'écran qui se remet à 100 %).
+    /// Forces the current raw value (for example the display resetting to 100%).
     pub fn set_raw(&self, raw: u32) {
         lock(&self.0).raw = raw;
     }
 
-    /// Nombre de lectures effectuées.
+    /// Number of reads performed.
     pub fn reads(&self) -> u32 {
         lock(&self.0).reads
     }
 
-    /// Fait échouer les `count` prochaines opérations d'écriture.
+    /// Makes the next `count` write operations fail.
     pub fn fail_next_writes(&self, count: usize, error: BackendError) {
         let mut s = lock(&self.0);
         s.scripted_failures
             .extend(std::iter::repeat_n(error, count));
     }
 
-    /// Fait échouer toutes les écritures tant que `error` vaut `Some`.
+    /// Makes all writes fail as long as `error` is `Some`.
     pub fn fail_always(&self, error: Option<BackendError>) {
         lock(&self.0).fail_always = error;
     }
 }
 
-/// Écran factice implémentant [`DisplayBackend`].
+/// Mock display implementing [`DisplayBackend`].
 #[derive(Debug)]
 pub struct MockBackend {
     info: DisplayInfo,
@@ -96,7 +96,7 @@ pub struct MockBackend {
 }
 
 impl MockBackend {
-    /// Crée un écran factice de maximum `max`, initialement à `raw`.
+    /// Creates a mock display with maximum `max`, initially at `raw`.
     pub fn new(id: &str, kind: DisplayKind, max: u32, raw: u32) -> (Self, MockControl) {
         let state = Arc::new(Mutex::new(State {
             max,
@@ -124,9 +124,9 @@ impl MockBackend {
 }
 
 impl MockBackend {
-    /// Crée un backend branché sur un écran factice existant : l'état matériel
-    /// (valeur brute, écritures) survit à la recréation du backend, comme un vrai
-    /// écran survit à un rescan.
+    /// Creates a backend attached to an existing mock display: the hardware state
+    /// (raw value, writes) survives the backend being recreated, just as a real
+    /// display survives a rescan.
     pub fn attach(info: DisplayInfo, control: &MockControl) -> Self {
         Self {
             info,

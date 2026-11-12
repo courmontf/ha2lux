@@ -1,6 +1,6 @@
 [package]
 name = "ha2lux-i18n"
-description = "Internationalisation de ha2lux : catalogues Fluent embarqués et choix de la langue."
+description = "ha2lux internationalization: embedded Fluent catalogs and language selection."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

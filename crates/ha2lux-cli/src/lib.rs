@@ -1,8 +1,8 @@
-//! CLI `ha2lux` : parle au démon par D-Bus ; une seule commande par appel.
+//! `ha2lux` CLI: talks to the daemon over D-Bus; a single command per call.
 //!
-//! Codes de sortie : 0 succès · 1 usage · 2 démon absent · 3 échec de la commande ·
-//! 4 démon sans réponse. Les mêmes validations existent dans le démon, qui reste
-//! l'autorité : la CLI ne fait que fournir un message d'erreur plus tôt et plus clair.
+//! Exit codes: 0 success · 1 usage · 2 daemon absent · 3 command failure ·
+//! 4 daemon not answering. The same validations exist in the daemon, which remains
+//! the authority: the CLI only provides an earlier and clearer error message.
 #![forbid(unsafe_code)]
 
 pub mod cli;

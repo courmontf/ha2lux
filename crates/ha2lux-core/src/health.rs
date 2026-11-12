@@ -1,25 +1,25 @@
-//! Santé du lien avec le capteur de lumière (spec §8.3) : validité des mesures,
-//! péremption, état « hors ligne » et « dégradé ». Sans E/S : le temps est celui de
-//! l'appelant (millisecondes monotones).
+//! Health of the link with the light sensor (spec §8.3): measurement validity,
+//! staleness, "offline" and "degraded" states. No I/O: time is the
+//! caller's (monotonic milliseconds).
 
 use crate::machine::HaHealth;
 
-/// Éclairement maximal accepté (lux).
+/// Maximum accepted illuminance (lux).
 pub const MAX_VALID_LUX: f64 = 1_000_000.0;
 
-/// Une valeur est utilisable si elle est **finie**, **≥ 0** et **≤ 1 000 000 lx**.
+/// A value is usable if it is **finite**, **≥ 0** and **≤ 1,000,000 lx**.
 pub fn is_valid_lux(value: f64) -> bool {
     value.is_finite() && (0.0..=MAX_VALID_LUX).contains(&value)
 }
 
-/// Réglages de la santé du lien.
+/// Link health settings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HealthConfig {
-    /// Une mesure plus vieille que cela est ignorée (défaut 10 min).
+    /// A measurement older than this is ignored (default 10 min).
     pub stale_ms: u64,
-    /// Sans mesure valide depuis ce délai, avec Home Assistant joignable : « dégradé » (défaut 15 min).
+    /// With no valid measurement for this long, with Home Assistant reachable: "degraded" (default 15 min).
     pub fallback_ms: u64,
-    /// Échecs consécutifs avant « hors ligne » (défaut 6, soit ≈ 90 s à 15 s).
+    /// Consecutive failures before "offline" (default 6, i.e. ≈ 90 s at 15 s).
     pub offline_after: u32,
 }
 
@@ -33,30 +33,30 @@ impl Default for HealthConfig {
     }
 }
 
-/// Résultat de la prise en compte d'une observation.
+/// Result of taking an observation into account.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Update {
-    /// Santé après l'observation.
+    /// Health after the observation.
     pub health: HaHealth,
-    /// La santé a changé.
+    /// The health has changed.
     pub changed: bool,
-    /// Mesure valide et fraîche à transmettre au filtre.
+    /// Valid, fresh measurement to pass to the filter.
     pub measurement: Option<f64>,
 }
 
-/// Suivi de la santé du lien.
+/// Link health tracking.
 #[derive(Clone, Debug)]
 pub struct HealthTracker {
     config: HealthConfig,
     health: HaHealth,
     failures: u32,
-    /// Dernière mesure valide, ou instant d'activation tant qu'il n'y en a pas eu.
+    /// Last valid measurement, or activation instant as long as there has been none.
     reference_ms: u64,
     ever_valid: bool,
 }
 
 impl HealthTracker {
-    /// Suivi neuf, démarré à `now_ms` (activation de l'auto-luminosité).
+    /// Fresh tracker, started at `now_ms` (auto-brightness activation).
     pub fn new(config: HealthConfig, now_ms: u64) -> Self {
         Self {
             config,
@@ -67,12 +67,12 @@ impl HealthTracker {
         }
     }
 
-    /// Santé actuelle.
+    /// Current health.
     pub fn health(&self) -> HaHealth {
         self.health
     }
 
-    /// Au moins une mesure valide a été reçue depuis l'activation.
+    /// At least one valid measurement has been received since activation.
     pub fn has_valid_measurement(&self) -> bool {
         self.ever_valid
     }
@@ -94,12 +94,12 @@ impl HealthTracker {
         }
     }
 
-    /// Réponse réussie portant une valeur numérique. `age_ms` est l'ancienneté de la
-    /// mesure d'après l'horodatage de Home Assistant (0 si absent : instant de réception).
+    /// Successful response carrying a numeric value. `age_ms` is the age of the
+    /// measurement according to Home Assistant's timestamp (0 if absent: reception instant).
     pub fn on_reading(&mut self, now_ms: u64, lux: f64, age_ms: u64) -> Update {
         self.failures = 0;
         if !is_valid_lux(lux) || age_ms > self.config.stale_ms {
-            return self.evaluate(now_ms); // joignable, mais mesure inutilisable
+            return self.evaluate(now_ms); // reachable, but the measurement is unusable
         }
         self.reference_ms = now_ms;
         self.ever_valid = true;
@@ -108,31 +108,31 @@ impl HealthTracker {
         update
     }
 
-    /// Réponse **réussie** sans mesure (`unavailable`, `unknown`, texte) : le lien est sain.
+    /// **Successful** response with no measurement (`unavailable`, `unknown`, text): the link is healthy.
     pub fn on_no_value(&mut self, now_ms: u64) -> Update {
         self.failures = 0;
         self.evaluate(now_ms)
     }
 
-    /// Échec de lecture (connexion, authentification, protocole), ou WebSocket coupé sans repli.
+    /// Read failure (connection, authentication, protocol), or WebSocket closed with no fallback.
     pub fn on_failure(&mut self, now_ms: u64) -> Update {
         self.failures = self.failures.saturating_add(1);
         self.evaluate(now_ms)
     }
 
-    /// Jeton refusé : le lien est considéré hors ligne **tout de suite** (inutile d'attendre
-    /// six échecs espacés de plusieurs minutes), jusqu'à une lecture réussie.
+    /// Token rejected: the link is considered offline **immediately** (no point waiting for
+    /// six failures spaced several minutes apart), until a successful read.
     pub fn on_auth_failure(&mut self, now_ms: u64) -> Update {
         self.failures = self.config.offline_after;
         self.evaluate(now_ms)
     }
 
-    /// Réévaluation périodique (le passage en « dégradé » ne dépend que du temps).
+    /// Periodic re-evaluation (the switch to "degraded" depends only on time).
     pub fn tick(&mut self, now_ms: u64) -> Update {
         self.evaluate(now_ms)
     }
 
-    /// Prochain instant où l'état peut changer sans nouvelle observation.
+    /// Next instant at which the state may change without a new observation.
     pub fn next_deadline(&self) -> Option<u64> {
         (self.health == HaHealth::Ok).then(|| self.reference_ms + self.config.fallback_ms)
     }

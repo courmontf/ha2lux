@@ -1,6 +1,6 @@
 [package]
 name = "ha2lux-core"
-description = "Cœur pur de ha2lux : règles métier déterministes, sans entrée/sortie."
+description = "Pure core of ha2lux: deterministic business rules, no I/O."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

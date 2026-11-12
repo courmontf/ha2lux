@@ -1,4 +1,4 @@
-//! T-CLI-10..13 : sélection d'un écran.
+//! T-CLI-10..13: display selection.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ha2lux_cli::select::{SelectError, select};

@@ -1,9 +1,9 @@
-//! `ha2lux doctor` : diagnostic de la chaîne DDC/CI et backlight.
+//! `ha2lux doctor`: diagnostics of the DDC/CI and backlight chain.
 //!
-//! Par défaut le diagnostic est **en lecture seule** : sysfs, nœuds `/dev`,
-//! `/proc`, `/etc`. Il ouvre les nœuds `/dev/i2c-N` pour tester les droits
-//! mais n'envoie aucune trame. La sonde DDC (vraies trames « Get VCP » sur
-//! les bus des écrans connectés) n'a lieu qu'avec `probe = true`.
+//! By default the diagnostics are **read-only**: sysfs, `/dev` nodes,
+//! `/proc`, `/etc`. It opens the `/dev/i2c-N` nodes to test permissions
+//! but sends no frame. The DDC probe (real "Get VCP" frames on
+//! the buses of connected displays) only happens with `probe = true`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -20,7 +20,7 @@ use crate::discovery::{BusSource, discover_external, list_adapters};
 use crate::drm::{self, Connector};
 use crate::i2c::{BusLocks, I2cOpener, LinuxI2cOpener};
 
-/// Gravité d'un contrôle, de la moins à la plus sévère.
+/// Severity of a check, from least to most severe.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
@@ -28,54 +28,54 @@ pub enum Status {
     Ok,
     /// Information.
     Info,
-    /// Anomalie probable, sans blocage certain.
+    /// Probable anomaly, without certain blocking.
     Warn,
-    /// Blocage : la fonction ne marchera pas.
+    /// Blocking: the feature will not work.
     Fail,
 }
 
-/// Résultat d'un contrôle.
+/// Result of a check.
 #[derive(Clone, Debug, Serialize)]
 pub struct Check {
     /// Identifiant stable.
     pub id: String,
-    /// Gravité.
+    /// Severity.
     pub status: Status,
     /// Constat.
     pub summary: String,
-    /// Remède proposé (jamais exécuté par ha2lux).
+    /// Suggested remedy (never executed by ha2lux).
     pub hint: Option<String>,
 }
 
-/// EDID résumé.
+/// Summarized EDID.
 #[derive(Clone, Debug, Serialize)]
 pub struct EdidReport {
     /// Fabricant (code PNP).
     pub manufacturer: String,
     /// Code produit.
     pub product: u16,
-    /// Série numérique.
+    /// Numeric serial.
     pub serial: u32,
-    /// Nom du moniteur.
+    /// Monitor name.
     pub name: Option<String>,
-    /// Identité stable retenue par ha2lux.
+    /// Stable identity retained by ha2lux.
     pub id: String,
-    /// Somme de contrôle correcte.
+    /// Checksum is correct.
     pub checksum_ok: bool,
 }
 
 /// Un connecteur DRM.
 #[derive(Clone, Debug, Serialize)]
 pub struct ConnectorReport {
-    /// Nom (ex. `DP-1`).
+    /// Name (e.g. `DP-1`).
     pub name: String,
-    /// Écran branché.
+    /// Display plugged in.
     pub connected: bool,
     /// Panneau interne.
     pub internal: bool,
-    /// Bus I²C exposé.
+    /// Exposed I²C bus.
     pub ddc_bus: Option<u32>,
-    /// Droits d'accès au nœud du bus (`None` si pas de bus).
+    /// Access rights on the bus node (`None` if no bus).
     pub bus_access: Option<bool>,
     /// EDID.
     pub edid: Option<EdidReport>,
@@ -83,12 +83,12 @@ pub struct ConnectorReport {
     pub notes: Vec<String>,
 }
 
-/// Un rétroéclairage.
+/// A backlight.
 #[derive(Clone, Debug, Serialize)]
 pub struct BacklightReport {
     /// Nom sysfs.
     pub name: String,
-    /// Type déclaré.
+    /// Declared type.
     pub kind: String,
     /// `max_brightness`.
     pub max: u32,
@@ -99,28 +99,28 @@ pub struct BacklightReport {
 /// Un adaptateur I²C.
 #[derive(Clone, Debug, Serialize)]
 pub struct BusReport {
-    /// Numéro `N` de `/dev/i2c-N`.
+    /// Number `N` of `/dev/i2c-N`.
     pub bus: u32,
-    /// Nom déclaré par le noyau.
+    /// Name declared by the kernel.
     pub name: Option<String>,
-    /// Le nœud peut être ouvert par cet utilisateur.
+    /// The node can be opened by this user.
     pub accessible: bool,
-    /// Bus DDC d'une carte graphique (le seul type sondé en repli).
+    /// DDC bus of a graphics card (the only type probed as a fallback).
     pub gpu_ddc: bool,
 }
 
-/// Résultat d'une sonde DDC.
+/// Result of a DDC probe.
 #[derive(Clone, Debug, Serialize)]
 pub struct ProbeReport {
     /// Connecteur.
     pub connector: String,
-    /// Identité de l'écran.
+    /// Display identity.
     pub id: String,
     /// Bus I²C.
     pub bus: u32,
-    /// Origine de l'association écran ↔ bus : `drm` ou `edid-i2c`.
+    /// Origin of the display to bus association: `drm` or `edid-i2c`.
     pub bus_source: String,
-    /// Sonde réussie.
+    /// Probe succeeded.
     pub ok: bool,
     /// Maximum VCP 0x10.
     pub max: Option<u32>,
@@ -135,20 +135,20 @@ pub struct ProbeReport {
 /// Rapport complet.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Report {
-    /// Contrôles.
+    /// Checks.
     pub checks: Vec<Check>,
     /// Connecteurs DRM.
     pub connectors: Vec<ConnectorReport>,
     /// Adaptateurs I²C.
     pub buses: Vec<BusReport>,
-    /// Rétroéclairages.
+    /// Backlights.
     pub backlights: Vec<BacklightReport>,
-    /// Sondes DDC (vide sans `--probe`).
+    /// DDC probes (empty without `--probe`).
     pub probes: Vec<ProbeReport>,
 }
 
 impl Report {
-    /// Gravité maximale.
+    /// Maximum severity.
     pub fn worst(&self) -> Status {
         self.checks
             .iter()
@@ -157,7 +157,7 @@ impl Report {
             .unwrap_or(Status::Ok)
     }
 
-    /// Code de sortie : 3 s'il y a au moins un blocage, sinon 0.
+    /// Exit code: 3 if there is at least one blocking issue, otherwise 0.
     pub fn exit_code(&self) -> u8 {
         if self.worst() == Status::Fail { 3 } else { 0 }
     }
@@ -167,7 +167,7 @@ impl Report {
         serde_json::to_string_pretty(self)
     }
 
-    /// Rendu texte pour le terminal.
+    /// Text rendering for the terminal.
     pub fn render_text(&self) -> String {
         let mut out = t!("doctor-title") + "\n\n";
         for check in &self.checks {
@@ -322,22 +322,22 @@ impl Report {
     }
 }
 
-/// Réglages du diagnostic.
+/// Diagnostics settings.
 pub struct DoctorOptions {
-    /// Racine du système (`/` en production ; un faux arbre dans les tests).
+    /// System root (`/` in production; a fake tree in tests).
     pub root: PathBuf,
-    /// Envoyer de vraies trames DDC/CI aux écrans connectés.
+    /// Send real DDC/CI frames to connected displays.
     pub probe: bool,
-    /// Identifiant de la session logind (`XDG_SESSION_ID`).
+    /// logind session identifier (`XDG_SESSION_ID`).
     pub session_id: Option<String>,
-    /// Ouvreur I²C (`None` : réel, sur `<root>/dev`).
+    /// I²C opener (`None`: real, on `<root>/dev`).
     pub opener: Option<Arc<dyn I2cOpener>>,
-    /// Délais DDC/CI de la sonde.
+    /// DDC/CI delays for the probe.
     pub timings: DdcTimings,
 }
 
 impl DoctorOptions {
-    /// Diagnostic du système réel.
+    /// Diagnostics of the real system.
     pub fn system(probe: bool) -> Self {
         Self {
             root: PathBuf::from("/"),
@@ -372,7 +372,7 @@ fn i2c_nodes(root: &Path) -> Vec<u32> {
     nodes
 }
 
-/// Ouvre le nœud en lecture/écriture pour tester les droits. Aucune trame n'est envoyée.
+/// Opens the node read/write to test permissions. No frame is sent.
 fn can_open(root: &Path, bus: u32) -> Result<(), String> {
     std::fs::OpenOptions::new()
         .read(true)
@@ -425,7 +425,7 @@ fn user_gids(root: &Path) -> Vec<u32> {
         .collect()
 }
 
-/// `(gid du groupe i2c, l'utilisateur en est membre)` si le groupe existe.
+/// `(gid of the i2c group, whether the user is a member)` if the group exists.
 fn i2c_group(root: &Path) -> Option<(u32, bool)> {
     let groups = std::fs::read_to_string(root.join("etc/group")).ok()?;
     let gid: u32 = groups
@@ -474,7 +474,7 @@ fn connector_report(c: &Connector, access: Option<bool>) -> ConnectorReport {
     }
 }
 
-/// Exécute le diagnostic.
+/// Runs the diagnostics.
 pub async fn run(options: &DoctorOptions) -> Report {
     let root = options.root.as_path();
     let mut report = Report::default();
@@ -499,7 +499,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
         )
     });
 
-    // 2. Nœuds.
+    // 2. Nodes.
     report.checks.push(if nodes.is_empty() {
         check(
             "noeuds-i2c",
@@ -516,7 +516,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
         )
     });
 
-    // 3. Droits d'accès (ouverture seule, aucune trame).
+    // 3. Access rights (open only, no frame).
     let access: std::collections::BTreeMap<u32, Result<(), String>> =
         nodes.iter().map(|b| (*b, can_open(root, *b))).collect();
     let ddc_buses: Vec<(String, u32)> = connectors
@@ -577,7 +577,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
         )
     });
 
-    // 4. Règle udev.
+    // 4. Udev rule.
     report.checks.push(match find_udev_rule(root) {
         Some(path) => check(
             "regle-udev",
@@ -618,7 +618,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
         ));
     }
 
-    // 7. NVIDIA propriétaire.
+    // 7. Proprietary NVIDIA.
     if root.join("proc/driver/nvidia").exists() {
         report.checks.push(check(
             "pilote-nvidia",
@@ -691,7 +691,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
         })
         .collect();
 
-    // Adaptateurs I²C (noms lus dans sysfs, lecture seule).
+    // I²C adapters (names read from sysfs, read-only).
     let adapters = list_adapters(&root.join("sys/class/i2c-dev"));
     report.buses = nodes
         .iter()
@@ -745,7 +745,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
             ),
         });
 
-    // 11. Session logind (nécessaire à l'écriture du backlight).
+    // 11. logind session (needed to write the backlight).
     if !backlights.is_empty() {
         report.checks.push(match &options.session_id {
             Some(id) => check(
@@ -763,7 +763,7 @@ pub async fn run(options: &DoctorOptions) -> Report {
         });
     }
 
-    // 12. Sonde DDC (vraies trames) uniquement sur demande.
+    // 12. DDC probe (real frames) only on request.
     if options.probe {
         let opener: Arc<dyn I2cOpener> = options
             .opener

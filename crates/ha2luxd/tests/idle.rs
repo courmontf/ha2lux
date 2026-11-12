@@ -1,5 +1,5 @@
-//! Pilote d'inactivité : fausses sources et fausses sondes de blocage, vrai acteur,
-//! temps virtuel (T-IDL-01..05, 13 dans leur forme « pilote »).
+//! Idle driver: fake sources and fake blocker probes, real actor,
+//! virtual time (T-IDL-01..05, 13 in their "driver" form).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -149,7 +149,7 @@ async fn t_idl_13_a_blocker_appearing_after_dimming_restores_and_it_dims_again_w
     events.send(IdleEvent::Idled).unwrap();
     rig.advance(Duration::from_secs(1)).await;
     assert_eq!(control.raw(), 5);
-    blockers.set(&["microphone en cours d'utilisation"]); // un appel démarre
+    blockers.set(&["microphone en cours d'utilisation"]); // a call starts
     rig.advance(Duration::from_secs(3)).await;
     assert_eq!(
         control.raw(),
@@ -167,7 +167,7 @@ async fn t_idl_13_a_blocker_appearing_after_dimming_restores_and_it_dims_again_w
 
 #[tokio::test(start_paused = true)]
 async fn the_idle_duration_reported_grows_past_the_threshold() {
-    // Contrôle indirect : à Idled + 10 s, la machine d'états reçoit idle ≥ seuil + 10 s sans erreur.
+    // Indirect check: at Idled + 10 s, the state machine receives idle ≥ threshold + 10 s without error.
     let (rig, control) = rig().await;
     let blockers = FakeBlockers::default();
     let (events, _task) = start_driver(&rig, &blockers);
@@ -239,7 +239,7 @@ async fn polled_source_probes_blockers_only_when_idle_and_restores_on_activity()
     rig.advance(Duration::from_secs(3)).await;
     assert_eq!(control.raw(), 5);
     assert!(blockers.probes() >= 1);
-    idle_ms.store(500, Ordering::SeqCst); // un mouvement de souris
+    idle_ms.store(500, Ordering::SeqCst); // a mouse movement
     rig.advance(Duration::from_secs(3)).await;
     assert_eq!(control.raw(), 60);
 }
@@ -338,7 +338,7 @@ async fn supervise_retries_a_source_that_ended_after_30_seconds() {
     let counter = Arc::clone(&count);
     let _supervisor = tokio::spawn(supervise(rig.handle.clone(), move |_| {
         counter.fetch_add(1, Ordering::SeqCst);
-        async {} // la source se termine aussitôt (compositeur parti)
+        async {} // the source ends immediately (compositor gone)
     }));
     rig.advance(Duration::from_secs(1)).await;
     assert_eq!(count.load(Ordering::SeqCst), 1);

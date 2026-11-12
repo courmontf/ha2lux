@@ -1,4 +1,4 @@
-//! Stockage du jeton : faux Secret Service sur bus privé, repli fichier 0600, T-SEC-03/04.
+//! Token storage: fake Secret Service on a private bus, 0600 file fallback, T-SEC-03/04.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::collections::HashMap;
@@ -56,7 +56,7 @@ impl PrivateBus {
 
 impl Drop for PrivateBus {
     fn drop(&mut self) {
-        // Le bus privé n'a plus d'utilité ; une erreur ici n'a aucune conséquence.
+        // The private bus is no longer needed; an error here has no consequence.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -237,7 +237,7 @@ impl FakeItem {
 
     async fn delete(&self, #[zbus(object_server)] server: &ObjectServer) -> OwnedObjectPath {
         lock(&self.world).items.retain(|i| i.id != self.id);
-        // L'objet peut déjà avoir disparu : sans importance.
+        // The object may have already disappeared: irrelevant.
         let _ = server.remove::<FakeItem, _>(item_path(self.id)).await;
         path("/")
     }
@@ -443,7 +443,7 @@ async fn the_file_store_uses_0600_and_refuses_a_world_readable_file() {
     assert_eq!(store.get("absent:1").await.unwrap(), None);
     assert!(store.delete("autre:80").await.unwrap());
     assert!(!store.delete("autre:80").await.unwrap());
-    // Un autre utilisateur pourrait lire : refus net, sans lire.
+    // Another user could read it: flat refusal, without reading.
     std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
     let error = store.get(HOST).await.unwrap_err();
     assert!(matches!(error, SecretError::TooOpen(_)), "{error:?}");
@@ -518,7 +518,7 @@ async fn the_chain_ignores_a_broken_keyring() {
     let store = ServiceSecretStore::with_connection(client(&bus).await)
         .await
         .unwrap();
-    drop(service); // le trousseau disparaît en cours de route
+    drop(service); // the keyring disappears midway
     let dir = TempDir::new().unwrap();
     let chain = ChainStore::new(
         Some(store),

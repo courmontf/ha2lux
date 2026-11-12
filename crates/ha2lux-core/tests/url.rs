@@ -1,4 +1,4 @@
-//! T-URL : normalisation et classification des URL Home Assistant (spec §8.2).
+//! T-URL: normalization and classification of Home Assistant URLs (spec §8.2).
 use ha2lux_core::url::{
     UrlError, UrlNote, authority_key, check_url, is_http, is_local_url, normalize_url,
 };
@@ -52,7 +52,7 @@ fn t_url_06_length_bound() {
     assert_eq!(exact.len(), 255);
     assert!(normalize_url(&exact).is_ok());
     assert_eq!(normalize_url(&format!("{exact}a")), Err(UrlError::TooLong));
-    // La longueur s'apprécie après ajout du schéma.
+    // The length is assessed after adding the scheme.
     assert_eq!(normalize_url(&"a".repeat(250)), Err(UrlError::TooLong));
 }
 
@@ -196,12 +196,12 @@ fn t_sec_04_the_token_key_is_the_normalized_host_and_port() {
     );
     assert_eq!(key("http://192.168.1.10:8123"), "192.168.1.10:8123");
     assert_eq!(key("http://[fd00::10]:8123"), "[fd00::10]:8123");
-    // Changer d'hôte, de port ou de schéma (donc de port par défaut) change la clé : le jeton
-    // enregistré pour l'ancien serveur n'est jamais présenté au nouveau.
+    // Changing host, port or scheme (hence the default port) changes the key: the token
+    // saved for the old server is never presented to the new one.
     assert_ne!(key("http://ha.local:8123"), key("http://ha.local:8124"));
     assert_ne!(key("http://ha.local:8123"), key("http://evil.local:8123"));
     assert_ne!(key("http://ha.example.com"), key("https://ha.example.com"));
-    // Formes refusées : pas de clé.
+    // Rejected forms: no key.
     for bad in [
         "",
         "http://user:pw@ha.local",

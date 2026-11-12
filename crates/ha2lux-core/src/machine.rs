@@ -1,12 +1,12 @@
-//! Machine d'états de pilotage (sans E/S) : voir `specs/ARCHITECTURE.md` §2.
+//! Control state machine (no I/O): see `specs/ARCHITECTURE.md` §2.
 //!
-//! Le [`Controller`] reçoit des [`Event`] datés (`Now`) et renvoie des
-//! [`Command`] à exécuter par les adaptateurs. Il ne touche jamais le
-//! matériel, ne lit jamais l'horloge et ne dort jamais : c'est l'appelant qui
-//! fait vivre le temps (horloge virtuelle dans les tests).
+//! The [`Controller`] receives timestamped [`Event`]s (`Now`) and returns
+//! [`Command`]s to be executed by the adapters. It never touches the
+//! hardware, never reads the clock and never sleeps: the caller is the one
+//! who drives time (virtual clock in tests).
 //!
-//! Trois couches : mode de base (auto-lux > planning > statique), maintien
-//! manuel, surcouche d'inactivité. La surcouche ne modifie jamais le maître.
+//! Three layers: base mode (auto-lux > schedule > static), manual
+//! hold, idle overlay. The overlay never modifies the master.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -21,41 +21,41 @@ use crate::gate::Gate;
 use crate::range::{Range, clamp_percent, reconstruct_master};
 use crate::schedule::{Schedule, ScheduleError, Suspension};
 
-/// Délais de relance après rejet d'une liste d'écrans factice (ms).
+/// Retry delays after a fake display list is rejected (ms).
 pub const FAKE_LIST_RETRY_MS: [u64; 4] = [2_000, 5_000, 10_000, 20_000];
-/// Délai de la seconde ré-application après un réveil (ms).
+/// Delay of the second re-apply after a wake (ms).
 pub const SECOND_REAPPLY_MS: u64 = 3_000;
-/// Fenêtre après un réveil pendant laquelle un écran dont le niveau lu a dérivé est réécrit
-/// (certains moniteurs finissent de se réinitialiser longtemps après le retour de la veille).
+/// Window after a wake during which a display whose read level has drifted is rewritten
+/// (some monitors finish resetting long after coming back from sleep).
 pub const WAKE_DRIFT_WINDOW_MS: u64 = 60_000;
-/// Délai de la vérification suivante quand une dérive vient d'être corrigée.
+/// Delay of the next check when a drift has just been corrected.
 pub const WAKE_DRIFT_RECHECK_MS: u64 = 5_000;
-/// Délai de rescan après un réveil (ms) : les écrans ne répondent pas tout de suite.
+/// Rescan delay after a wake (ms): displays do not respond right away.
 pub const WAKE_RESCAN_MS: u64 = 1_500;
-/// Échecs d'écriture consécutifs avant de déclarer un écran indisponible.
+/// Consecutive write failures before declaring a display unavailable.
 pub const FAILURES_BEFORE_UNAVAILABLE: u8 = 3;
-/// Écart (échelle log) de lumière qui met fin à la pause de l'auto après un preset.
+/// Light gap (log scale) that ends the auto pause after a preset.
 const PAUSE_BREAK_LOG_DELTA: f64 = 0.3;
 
-/// Réglages utiles à la machine d'états.
+/// Settings relevant to the state machine.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ControllerConfig {
-    /// Planning validé.
+    /// Validated schedule.
     pub schedule: Schedule,
-    /// Planning activé.
+    /// Schedule enabled.
     pub schedule_enabled: bool,
-    /// Atténuation à l'inactivité.
+    /// Idle dimming.
     pub idle: IdleConfig,
-    /// Auto-luminosité demandée.
+    /// Auto-brightness requested.
     pub auto_enabled: bool,
-    /// URL, jeton et entité sont renseignés.
+    /// URL, token and entity are set.
     pub auto_configured: bool,
-    /// Réglages fins.
+    /// Fine settings.
     pub tuning: Tuning,
 }
 
 impl ControllerConfig {
-    /// Extrait les réglages d'une configuration validée.
+    /// Extracts the settings from a validated configuration.
     pub fn from_config(config: &Config, auto_configured: bool) -> Result<Self, ScheduleError> {
         Ok(Self {
             schedule: config.build_schedule()?,
@@ -82,274 +82,274 @@ impl Default for ControllerConfig {
     }
 }
 
-/// État restauré au démarrage (fichier d'état).
+/// State restored at startup (state file).
 #[derive(Clone, Debug, Default)]
 pub struct InitialState {
-    /// Dernier maître connu.
+    /// Last known master.
     pub master: Option<u8>,
-    /// Suspension du planning en cours.
+    /// Schedule suspension in progress.
     pub suspension: Option<Suspension>,
-    /// Courbe apprise.
+    /// Learned curve.
     pub curve: Curve,
-    /// Plages des écrans connus (même débranchés).
+    /// Ranges of known displays (even unplugged).
     pub ranges: BTreeMap<DisplayId, Range>,
 }
 
-/// Santé du lien Home Assistant.
+/// Health of the Home Assistant link.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HaHealth {
-    /// Lien sain.
+    /// Healthy link.
     Ok,
-    /// Hors ligne (échecs consécutifs).
+    /// Offline (consecutive failures).
     Offline,
-    /// Dégradé (pas de mesure valide depuis trop longtemps).
+    /// Degraded (no valid measurement for too long).
     Degraded,
 }
 
-/// Fonctions activables.
+/// Features that can be enabled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Feature {
-    /// Planning.
+    /// Schedule.
     Schedule,
-    /// Atténuation à l'inactivité.
+    /// Idle dimming.
     IdleDim,
-    /// Auto-luminosité.
+    /// Auto-brightness.
     Auto,
 }
 
-/// État d'un écran vu par la machine.
+/// State of a display as seen by the machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayState {
-    /// Répond et peut être piloté.
+    /// Responds and can be driven.
     Controllable,
-    /// Déjà contrôlable ou connu de la config, ne répond pas : relancé.
+    /// Already controllable or known to the config, does not respond: retried.
     Unavailable,
-    /// N'a jamais répondu : relancé seulement sur événement.
+    /// Has never responded: retried only on an event.
     NotControllable,
-    /// Plus présent dans la dernière liste acceptée.
+    /// No longer present in the last accepted list.
     Absent,
 }
 
-/// Écran issu d'une énumération.
+/// Display coming from an enumeration.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Listed {
-    /// Identifiant stable.
+    /// Stable identifier.
     pub id: DisplayId,
-    /// La sonde a réussi (lecture valide, maximum > 0).
+    /// The probe succeeded (valid read, maximum > 0).
     pub controllable: bool,
-    /// Niveau écran lu (0-100), s'il l'a été.
+    /// Display level read (0-100), if it was read.
     pub level: Option<u8>,
 }
 
-/// Événements d'entrée.
+/// Input events.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
-    /// Définir le maître (0-100, sinon rejeté).
+    /// Set the master (0-100, otherwise rejected).
     SetMaster(i64),
-    /// Variation du maître (−100..=100).
+    /// Master change (−100..=100).
     Step(i64),
-    /// Niveau direct d'un écran (0-100 de son niveau, hors plage).
+    /// Direct level of a display (0-100 of its level, outside the range).
     SetDisplay {
-        /// Écran visé.
+        /// Targeted display.
         display: DisplayId,
-        /// Niveau écran.
+        /// Display level.
         level: i64,
     },
-    /// Preset : niveau maître tenu temporairement, jamais appris.
+    /// Preset: master level held temporarily, never learned.
     Preset(i64),
-    /// Nouvelle plage pour un écran.
+    /// New range for a display.
     SetRange {
-        /// Écran visé.
+        /// Targeted display.
         display: DisplayId,
-        /// Borne basse brute.
+        /// Raw lower bound.
         low: i64,
-        /// Borne haute brute.
+        /// Raw upper bound.
         high: i64,
     },
-    /// Activation d'une fonction.
+    /// Activation of a feature.
     Feature(Feature, bool),
-    /// Oublier la courbe apprise.
+    /// Forget the learned curve.
     ResetCurve,
-    /// Annuler le dernier apprentissage.
+    /// Undo the last learning.
     UndoLearn,
-    /// Configuration rechargée.
+    /// Configuration reloaded.
     Reload(Box<ControllerConfig>),
-    /// Évaluation périodique du planning (60 s).
+    /// Periodic evaluation of the schedule (60 s).
     PlanningTick,
-    /// Pas de rampe demandé par [`Command::ArmRampTimer`].
+    /// Ramp step requested by [`Command::ArmRampTimer`].
     RampTick,
-    /// Mesure de lux valide.
+    /// Valid lux measurement.
     Lux(f64),
-    /// Changement de santé du lien Home Assistant.
+    /// Health change of the Home Assistant link.
     Ha(HaHealth),
-    /// L'auto-luminosité devient configurée (URL, entité et jeton présents) ou ne l'est plus.
+    /// Auto-brightness becomes configured (URL, entity and token present) or no longer is.
     AutoConfigured(bool),
-    /// Sonde d'inactivité.
+    /// Idle probe.
     IdleProbe {
-        /// Durée d'inactivité de la session (ms).
+        /// Session idle duration (ms).
         idle_ms: u64,
-        /// Un blocage est actif (inhibiteur, plein écran, micro/caméra).
+        /// A blocker is active (inhibitor, fullscreen, microphone/camera).
         blocked: bool,
     },
-    /// Reprise d'activité de l'utilisateur.
+    /// User activity resumed.
     Activity,
-    /// Réveil de veille, déverrouillage, hotplug, écran rallumé.
+    /// Wake from sleep, unlock, hotplug, display turned back on.
     Wake,
-    /// Seconde ré-application différée après un réveil.
+    /// Second deferred re-apply after a wake.
     Reapply,
-    /// Nouvelle liste d'écrans issue d'un rescan.
+    /// New display list coming from a rescan.
     DisplaysListed(Vec<Listed>),
-    /// Résultat d'une écriture demandée par [`Command::Write`].
+    /// Result of a write requested by [`Command::Write`].
     WriteResult {
-        /// Écran concerné.
+        /// Display concerned.
         display: DisplayId,
-        /// Niveau écrit.
+        /// Level written.
         level: u8,
-        /// Succès de l'écriture.
+        /// Write succeeded.
         ok: bool,
     },
 }
 
-/// Données à persister (le démon débounce).
+/// Data to persist (the daemon debounces).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Persist {
-    /// Maître courant.
+    /// Current master.
     Master,
-    /// Courbe apprise.
+    /// Learned curve.
     Curve,
-    /// Suspension du planning.
+    /// Schedule suspension.
     Suspension,
-    /// Plages des écrans.
+    /// Display ranges.
     Ranges,
 }
 
-/// Informations destinées à l'utilisateur.
+/// Information intended for the user.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Notice {
-    /// Apprentissage refusé : trop de points contredits.
+    /// Learning refused: too many contradicted points.
     LearnRefused {
-        /// Nombre de points contredits.
+        /// Number of contradicted points.
         contradicted: usize,
     },
-    /// Écran passé en indisponible après des échecs répétés.
+    /// Display marked unavailable after repeated failures.
     DisplayUnavailable(DisplayId),
-    /// Liste d'écrans rejetée (factice) ; nouvelle tentative prévue.
+    /// Display list rejected (fake); new attempt scheduled.
     ListRejected {
-        /// Délai avant le prochain rescan (ms).
+        /// Delay before the next rescan (ms).
         retry_in_ms: u64,
     },
 }
 
-/// Commandes de sortie, exécutées par les adaptateurs.
+/// Output commands, executed by the adapters.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
-    /// Écrire le niveau écran (0-100) ; l'exécuteur coalesce et convertit en brut.
+    /// Write the display level (0-100); the executor coalesces and converts to raw.
     Write {
-        /// Écran visé.
+        /// Targeted display.
         display: DisplayId,
-        /// Niveau écran 0-100.
+        /// Display level 0-100.
         level: u8,
     },
-    /// Lancer un rescan (ciblé si `target`), après `delay_ms`.
+    /// Start a rescan (targeted if `target`), after `delay_ms`.
     Rescan {
-        /// Écran ciblé, ou tous.
+        /// Targeted display, or all.
         target: Option<DisplayId>,
-        /// Délai avant de scanner.
+        /// Delay before scanning.
         delay_ms: u64,
     },
-    /// Émettre [`Event::RampTick`] dans `in_ms`.
+    /// Emit [`Event::RampTick`] in `in_ms`.
     ArmRampTimer {
-        /// Délai en ms.
+        /// Delay in ms.
         in_ms: u64,
     },
-    /// Émettre [`Event::Reapply`] dans `in_ms`.
+    /// Emit [`Event::Reapply`] in `in_ms`.
     ArmReapply {
-        /// Délai en ms.
+        /// Delay in ms.
         in_ms: u64,
     },
-    /// Rapprocher le prochain sondage Home Assistant (confirmation d'un saut).
+    /// Bring forward the next Home Assistant poll (confirmation of a jump).
     PollLuxSoon {
-        /// Délai en ms.
+        /// Delay in ms.
         in_ms: u64,
     },
-    /// Persister une donnée.
+    /// Persist a piece of data.
     Persist(Persist),
-    /// Information pour l'interface.
+    /// Information for the interface.
     Notify(Notice),
 }
 
-/// Requêtes utilisateur invalides, refusées sans effet.
+/// Invalid user requests, rejected with no effect.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ControlError {
-    /// Valeur hors bornes.
+    /// Value out of bounds.
     #[error("value out of range ({what}): {value}")]
     OutOfRange {
-        /// Grandeur concernée : `master-level`, `display-level`, `step` ou `preset-level`.
+        /// Quantity concerned: `master-level`, `display-level`, `step` or `preset-level`.
         what: &'static str,
-        /// Valeur reçue.
+        /// Value received.
         value: i64,
     },
-    /// Écran inconnu.
+    /// Unknown display.
     #[error("unknown display: {0}")]
     UnknownDisplay(DisplayId),
-    /// Écran connu mais pas contrôlable pour le moment.
+    /// Display known but not controllable at the moment.
     #[error("display unavailable: {0}")]
     DisplayUnavailable(DisplayId),
-    /// Aucun écran contrôlable.
+    /// No controllable display.
     #[error("no controllable display")]
     NoControllableDisplay,
 }
 
-/// Source qui décide du maître (couche 1).
+/// Source that decides the master (layer 1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BaseMode {
-    /// Capteur de lux Home Assistant.
+    /// Home Assistant lux sensor.
     AutoLux,
-    /// Planning horaire.
+    /// Hourly schedule.
     Planning,
-    /// Le dernier maître reste.
+    /// The last master stays.
     Static,
 }
 
-/// État de l'auto-luminosité pour le panneau d'état.
+/// State of auto-brightness for the status panel.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AutoInfo {
-    /// Lux lissé par le filtre (aucune mesure : `None`).
+    /// Lux smoothed by the filter (no measurement: `None`).
     pub smoothed_lux: Option<f64>,
-    /// Lux le plus récent (mesure en attente de confirmation, sinon lux lissé).
+    /// Most recent lux (measurement awaiting confirmation, otherwise smoothed lux).
     pub latest_lux: Option<f64>,
-    /// Un grand écart attend sa confirmation.
+    /// A large gap is awaiting its confirmation.
     pub adjusting: bool,
-    /// Points de la courbe effectivement utilisée (lux, niveau maître).
+    /// Points of the curve actually in use (lux, master level).
     pub curve: Vec<(f64, u8)>,
-    /// La courbe est la courbe par défaut (rien d'appris).
+    /// The curve is the default curve (nothing learned).
     pub default_curve: bool,
-    /// Niveau cible de la courbe pour le lux lissé.
+    /// Target level from the curve for the smoothed lux.
     pub target: Option<u8>,
 }
 
-/// Instantané de l'état, pour l'interface et les tests.
+/// Snapshot of the state, for the interface and tests.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Status {
-    /// Maître courant.
+    /// Current master.
     pub master: Option<u8>,
-    /// Dernier maître confirmé écrit sur tous les écrans visés.
+    /// Last master confirmed written to all targeted displays.
     pub applied_master: Option<u8>,
-    /// Source de base.
+    /// Base source.
     pub mode: BaseMode,
-    /// Suspension du planning.
+    /// Schedule suspension.
     pub suspension: Option<Suspension>,
-    /// Atténuation d'inactivité en cours.
+    /// Idle dimming in progress.
     pub dimmed: bool,
-    /// Cible de rampe en cours.
+    /// Ramp target in progress.
     pub ramp_target: Option<u8>,
-    /// Santé Home Assistant.
+    /// Home Assistant health.
     pub ha_health: HaHealth,
-    /// Au moins une mesure valide reçue.
+    /// At least one valid measurement received.
     pub has_measure: bool,
-    /// Auto en pause après un preset.
+    /// Auto paused after a preset.
     pub auto_paused: bool,
-    /// Écrans : identifiant, état, dernier niveau commandé, plage.
+    /// Displays: identifier, state, last commanded level, range.
     pub displays: Vec<(DisplayId, DisplayState, Option<u8>, Range)>,
 }
 
@@ -379,7 +379,7 @@ enum ManualKind {
     Preset,
 }
 
-/// Machine d'états de pilotage.
+/// Control state machine.
 pub struct Controller {
     cfg: ControllerConfig,
     displays: BTreeMap<DisplayId, Disp>,
@@ -397,13 +397,13 @@ pub struct Controller {
     gate: Gate,
     curve: Curve,
     reapply_on_list: bool,
-    /// Fin de la fenêtre de correction de dérive qui suit un réveil.
+    /// End of the drift-correction window that follows a wake.
     drift_until_ms: Option<u64>,
     fake_attempts: usize,
 }
 
 impl Controller {
-    /// Crée la machine à partir de la configuration et de l'état persisté.
+    /// Creates the machine from the configuration and the persisted state.
     pub fn new(cfg: ControllerConfig, initial: InitialState) -> Self {
         let displays = initial
             .ranges
@@ -442,7 +442,7 @@ impl Controller {
         }
     }
 
-    /// Source de base : auto-lux > planning > statique.
+    /// Base source: auto-lux > schedule > static.
     pub fn base_mode(&self) -> BaseMode {
         if self.auto_owner() {
             BaseMode::AutoLux
@@ -453,12 +453,12 @@ impl Controller {
         }
     }
 
-    /// Courbe apprise.
+    /// Learned curve.
     pub fn curve(&self) -> &Curve {
         &self.curve
     }
 
-    /// État de l'auto-luminosité (filtre, courbe, cible).
+    /// State of auto-brightness (filter, curve, target).
     pub fn auto_info(&self) -> AutoInfo {
         let has_value = self.filter.has_value();
         AutoInfo {
@@ -476,7 +476,7 @@ impl Controller {
         }
     }
 
-    /// Instantané de l'état.
+    /// Snapshot of the state.
     pub fn status(&self) -> Status {
         Status {
             master: self.master,
@@ -496,9 +496,9 @@ impl Controller {
         }
     }
 
-    /// Mémorise la plage d'un écran, vu ou non (plages du fichier de
-    /// configuration, y compris pour des écrans débranchés). Aucune écriture :
-    /// elle prend effet à la prochaine application (rechargement, réveil…).
+    /// Remembers the range of a display, seen or not (ranges from the
+    /// configuration file, including for unplugged displays). No write:
+    /// it takes effect at the next application (reload, wake…).
     pub fn remember_range(&mut self, id: DisplayId, range: Range) {
         self.displays
             .entry(id)
@@ -511,9 +511,9 @@ impl Controller {
             });
     }
 
-    /// Traite un événement et renvoie les commandes à exécuter.
+    /// Handles an event and returns the commands to execute.
     ///
-    /// Une requête utilisateur invalide renvoie une erreur sans aucun effet.
+    /// An invalid user request returns an error with no effect at all.
     pub fn handle(&mut self, now: Now, event: Event) -> Result<Vec<Command>, ControlError> {
         let mut out = Vec::new();
         match event {
@@ -593,7 +593,7 @@ impl Controller {
         Ok(out)
     }
 
-    // ---- Prédicats ---------------------------------------------------------
+    // ---- Predicates ---------------------------------------------------------
 
     fn auto_owner(&self) -> bool {
         self.cfg.auto_enabled
@@ -618,7 +618,7 @@ impl Controller {
         }
     }
 
-    /// Reconstruit le maître s'il est inconnu (spec §4.5).
+    /// Rebuilds the master if it is unknown (spec §4.5).
     fn ensure_master(&mut self, out: &mut Vec<Command>) {
         if self.master.is_none() {
             self.master = Some(self.reconstructed_master());
@@ -635,10 +635,10 @@ impl Controller {
         )
     }
 
-    // ---- Écritures ---------------------------------------------------------
+    // ---- Writes ---------------------------------------------------------
 
-    /// Applique un maître à tous les écrans contrôlables. Sans `force`, seuls
-    /// les écrans dont le niveau change sont écrits.
+    /// Applies a master to all controllable displays. Without `force`, only
+    /// displays whose level changes are written.
     fn apply_master(&mut self, master: u8, force: bool, out: &mut Vec<Command>) {
         self.master = Some(master);
         out.push(Command::Persist(Persist::Master));
@@ -660,12 +660,12 @@ impl Controller {
             }
         }
         if waiting.is_empty() {
-            // Rien à écrire : le maître n'est « appliqué » que s'il existe au
-            // moins un écran déjà au bon niveau (jamais sans écran).
+            // Nothing to write: the master is only "applied" if there is at
+            // least one display already at the right level (never with no display).
             self.applied_master = targeted.then_some(master);
             self.pending = None;
         } else {
-            // Écritures en vol : rien n'est « appliqué » tant qu'elles ne sont pas confirmées.
+            // Writes in flight: nothing is "applied" until they are confirmed.
             self.applied_master = None;
             self.pending = Some(Pending { master, waiting });
         }
@@ -723,9 +723,9 @@ impl Controller {
             return;
         }
         if d.level != Some(level) {
-            return; // résultat périmé : une valeur plus récente a été commandée
+            return; // stale result: a more recent value has been commanded
         }
-        // Un échec n'est jamais mémorisé comme appliqué.
+        // A failure is never remembered as applied.
         d.level = None;
         d.failures = d.failures.saturating_add(1);
         self.pending = None;
@@ -741,9 +741,9 @@ impl Controller {
         }
     }
 
-    // ---- Actions manuelles ----------------------------------------------------
+    // ---- Manual actions ----------------------------------------------------
 
-    /// Effets d'une action manuelle selon le mode de base (hors écriture).
+    /// Effects of a manual action depending on the base mode (excluding the write).
     fn manual_policy(&mut self, now: Now, master: u8, kind: ManualKind, out: &mut Vec<Command>) {
         self.ramp = None;
         self.dimmed = false;
@@ -815,7 +815,7 @@ impl Controller {
         if !self.displays.contains_key(&display) {
             return Err(ControlError::UnknownDisplay(display));
         }
-        // Le maître inconnu est reconstruit avec l'ancienne plage.
+        // The unknown master is rebuilt with the old range.
         self.ensure_master(out);
         if let Some(d) = self.displays.get_mut(&display) {
             d.range = Range::normalized(low, high);
@@ -829,7 +829,7 @@ impl Controller {
         Ok(())
     }
 
-    // ---- Fonctions et configuration ----------------------------------------------
+    // ---- Features and configuration ----------------------------------------------
 
     fn set_feature(&mut self, now: Now, feature: Feature, on: bool, out: &mut Vec<Command>) {
         match feature {
@@ -880,7 +880,7 @@ impl Controller {
         }
     }
 
-    // ---- Planning --------------------------------------------------------------
+    // ---- Schedule --------------------------------------------------------------
 
     fn planning_tick(&mut self, now: Now, out: &mut Vec<Command>) {
         if self.dimmed || self.auto_owner() || !self.planning_active() {
@@ -902,7 +902,7 @@ impl Controller {
         }
     }
 
-    // ---- Auto-luminosité --------------------------------------------------------
+    // ---- Auto-brightness --------------------------------------------------------
 
     fn apply_auto_forced(&mut self, out: &mut Vec<Command>) {
         let target = self.curve.level_at(self.filter.smoothed_lux());
@@ -1002,7 +1002,7 @@ impl Controller {
             HaHealth::Offline | HaHealth::Degraded => {
                 self.ramp = None;
                 if !self.dimmed && previous == HaHealth::Ok {
-                    // Le planning (ou le dernier maître) reprend, valeur forcée.
+                    // The schedule (or the last master) resumes, value forced.
                     self.reapply(now, out);
                 }
             }
@@ -1016,7 +1016,7 @@ impl Controller {
         let was_owner = self.auto_owner();
         self.cfg.auto_configured = configured;
         if !configured {
-            // Plus de lien possible : on repart de zéro, le planning ou le dernier maître reprend.
+            // No link possible anymore: start over from zero, the schedule or the last master resumes.
             self.has_measure = false;
             self.filter.reset();
             self.gate.reset();
@@ -1027,7 +1027,7 @@ impl Controller {
         }
     }
 
-    // ---- Inactivité -------------------------------------------------------------
+    // ---- Idle -------------------------------------------------------------
 
     fn on_idle_probe(&mut self, now: Now, idle_ms: u64, blocked: bool, out: &mut Vec<Command>) {
         if !self.cfg.idle.enabled {
@@ -1057,10 +1057,10 @@ impl Controller {
         self.reapply(now, out);
     }
 
-    // ---- Ré-application par priorité ---------------------------------------------
+    // ---- Priority re-apply ---------------------------------------------
 
-    /// Ré-application par priorité : atténué > auto (forcé) > planning
-    /// (forcé, sauf suspension non échue) > dernier maître.
+    /// Priority re-apply: dimmed > auto (forced) > schedule
+    /// (forced, unless suspension not yet expired) > last master.
     fn reapply(&mut self, now: Now, out: &mut Vec<Command>) {
         self.ramp = None;
         if self.dimmed {
@@ -1091,7 +1091,7 @@ impl Controller {
         }
     }
 
-    // ---- Liste d'écrans -------------------------------------------------------------
+    // ---- Display list -------------------------------------------------------------
 
     fn on_list(&mut self, now: Now, list: Vec<Listed>, out: &mut Vec<Command>) {
         let had_controllable = self
@@ -1107,7 +1107,7 @@ impl Controller {
                     target: None,
                     delay_ms: delay,
                 });
-                return; // liste factice : on garde l'ancienne
+                return; // fake list: keep the old one
             }
         }
         self.fake_attempts = 0;
@@ -1145,7 +1145,7 @@ impl Controller {
         }
 
         if self.master.is_none() && has_controllable {
-            // Démarrage sans état : on reconstruit le maître sans rien écrire.
+            // Startup without state: rebuild the master without writing anything.
             self.master = Some(self.reconstructed_master());
             out.push(Command::Persist(Persist::Master));
             self.reapply_on_list = false;
@@ -1162,8 +1162,8 @@ impl Controller {
         } else if self.drift_until_ms.is_some_and(|until| now.ms < until) {
             self.correct_drift(&list, out);
         }
-        // Tant que la fenêtre qui suit un réveil est ouverte, on revérifie : la réinitialisation
-        // tardive d'un écran n'est pas toujours accompagnée d'un événement de branchement.
+        // As long as the window that follows a wake is open, we re-check: the late
+        // reset of a display is not always accompanied by a plug event.
         if self
             .drift_until_ms
             .is_some_and(|until| now.ms + WAKE_DRIFT_RECHECK_MS < until)
@@ -1175,9 +1175,9 @@ impl Controller {
         }
     }
 
-    /// Réécrit les écrans dont le niveau lu s'écarte de celui attendu (réinitialisation tardive
-    /// après un réveil), puis programme une vérification. Ne sert qu'après un réveil : hors de
-    /// cette fenêtre, un réglage fait avec les boutons du moniteur n'est jamais écrasé.
+    /// Rewrites the displays whose read level differs from the expected one (late reset
+    /// after a wake), then schedules a check. Only used after a wake: outside
+    /// this window, a setting made with the monitor's buttons is never overwritten.
     fn correct_drift(&mut self, list: &[Listed], out: &mut Vec<Command>) {
         let mut drifted = Vec::new();
         for l in list.iter().filter(|l| l.controllable) {
@@ -1198,7 +1198,7 @@ impl Controller {
         }
     }
 
-    /// Envoie le niveau courant (inactivité ou maître) aux seuls écrans donnés.
+    /// Sends the current level (idle or master) only to the given displays.
     fn write_to(&mut self, ids: &[DisplayId], out: &mut Vec<Command>) {
         for id in ids {
             let Some(range) = self.displays.get(id).map(|d| d.range) else {

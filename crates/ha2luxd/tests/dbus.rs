@@ -1,7 +1,7 @@
-//! Service D-Bus de bout en bout sur un **bus privé** (jamais la session de l'utilisateur).
+//! End-to-end D-Bus service on a **private bus** (never the user's session).
 //!
-//! Chaque test lance son propre `dbus-daemon`. S'il est introuvable, les tests sont
-//! ignorés avec un message (ils ne passent pas pour autant en silence : voir `SKIPPED`).
+//! Each test starts its own `dbus-daemon`. If it cannot be found, the tests are
+//! skipped with a message (they do not pass silently either: see `SKIPPED`).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::io::{BufRead, BufReader};
@@ -21,7 +21,7 @@ use ha2luxd::service::{BusKind, ServiceError, ServiceOptions, run};
 use tempfile::TempDir;
 use tokio::task::JoinHandle;
 
-/// Bus de session privé, détruit à la fin du test.
+/// Private session bus, destroyed at the end of the test.
 struct PrivateBus {
     child: Child,
     address: String,
@@ -66,7 +66,7 @@ impl PrivateBus {
 
 impl Drop for PrivateBus {
     fn drop(&mut self) {
-        // Le bus privé n'a plus d'utilité ; une erreur ici n'a aucune conséquence.
+        // The private bus is no longer needed; an error here has no consequence.
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -143,7 +143,7 @@ fn spawn_service(bus: &PrivateBus, setup: Setup) -> Instance {
     };
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
     let task = tokio::spawn(run(options, async move {
-        // Arrêt demandé par le test ; un canal fermé vaut aussi arrêt.
+        // Shutdown requested by the test; a closed channel also means shutdown.
         let _ = stopped.await;
     }));
     Instance {
@@ -159,7 +159,7 @@ fn spawn_service(bus: &PrivateBus, setup: Setup) -> Instance {
 impl Instance {
     async fn stop(mut self) -> Result<(), ServiceError> {
         if let Some(stop) = self.stop.take() {
-            // Le service a pu déjà s'arrêter (Quit) : sans importance.
+            // The service may have already stopped (Quit): irrelevant.
             let _ = stop.send(());
         }
         self.task.await.unwrap()
@@ -167,7 +167,7 @@ impl Instance {
 }
 
 impl Instance {
-    /// Arrête le service puis lit le fichier d'état avant de détruire le répertoire temporaire.
+    /// Stops the service, then reads the state file before destroying the temporary directory.
     async fn stop_and_read_state(self) -> String {
         let Instance {
             task,
@@ -177,7 +177,7 @@ impl Instance {
             ..
         } = self;
         if let Some(stop) = stop {
-            // Le service a pu déjà s'arrêter : sans importance.
+            // The service may have already stopped: irrelevant.
             let _ = stop.send(());
         }
         task.await.unwrap().unwrap();
@@ -223,7 +223,7 @@ async fn until(what: &str, mut condition: impl FnMut() -> bool) {
 fn method_error(error: &zbus::Error) -> String {
     match error {
         zbus::Error::MethodError(name, detail, _) => {
-            // Comme le client : le détail est une clé + arguments à traduire.
+            // Like the client: the detail is a key + arguments to translate.
             let detail = ha2lux_i18n::wire::localize(&detail.clone().unwrap_or_default());
             format!("{} {detail}", name.as_str())
         }
@@ -455,7 +455,7 @@ async fn a_new_instance_replaces_the_old_one_cleanly() {
     proxy.set_master(33).await.unwrap();
     until("écran à 33", || first.control.raw() == 33).await;
 
-    // Même fichiers d'état : le successeur doit retrouver ce que l'ancien a écrit en partant.
+    // Same state files: the successor must recover what the predecessor wrote on exit.
     let shared = first.paths.clone();
     let second = spawn_service(
         &bus,
@@ -465,7 +465,7 @@ async fn a_new_instance_replaces_the_old_one_cleanly() {
         },
     );
     let first_task = first.task;
-    // L'ancienne instance s'arrête d'elle-même (demande de sortie) ; la nouvelle prend la place.
+    // The old instance stops by itself (exit request); the new one takes its place.
     tokio::time::timeout(Duration::from_secs(10), first_task)
         .await
         .unwrap()
@@ -549,9 +549,9 @@ async fn shutdown_signal_stops_cleanly_and_flushes_state() {
     assert!(state.contains("master = 47"), "{state}");
 }
 
-/// Lance le **vrai binaire** `ha2luxd` (matériel réel, pas de faux) sur un bus privé, avec des
-/// répertoires XDG temporaires. Ignoré par défaut : sur un poste avec backlight ou écrans liés en
-/// DDC dans sysfs, le démon lirait leur luminosité (sondes en lecture). À lancer à la main :
+/// Runs the **real binary** `ha2luxd` (real hardware, no fakes) on a private bus, with
+/// temporary XDG directories. Ignored by default: on a machine with a backlight or displays linked via
+/// DDC in sysfs, the daemon would read their brightness (read probes). Run by hand:
 /// `cargo test -p ha2luxd --test dbus -- --ignored --nocapture`.
 #[tokio::test]
 #[ignore = "lance le vrai binaire avec le matériel réel (sondes en lecture) ; à lancer à la main"]
@@ -608,7 +608,7 @@ async fn real_binary_smoke_on_a_private_bus() {
         "configuration par défaut créée"
     );
 
-    // Arrêt par SIGTERM (comme `systemctl --user stop`).
+    // Shutdown via SIGTERM (like `systemctl --user stop`).
     assert!(
         Command::new("kill")
             .arg("-TERM")
@@ -621,7 +621,7 @@ async fn real_binary_smoke_on_a_private_bus() {
     assert!(status.success(), "arrêt propre sur SIGTERM : {status}");
     wait_owner(&connection, false).await;
 
-    // Deuxième vie : arrêt par Quit.
+    // Second life: shutdown via Quit.
     let mut child = spawn();
     wait_owner(&connection, true).await;
     DaemonProxy::new(&connection)

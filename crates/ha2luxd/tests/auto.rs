@@ -1,4 +1,4 @@
-//! Auto-luminosité dans le démon : jeton, source de mesures, état publié (faux Home Assistant).
+//! Auto-brightness in the daemon: token, measurement source, published state (fake Home Assistant).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -157,7 +157,7 @@ async fn token_found_at_startup_configures_auto_and_follows_light() {
     assert!((s.lux_smoothed.unwrap() - 300.0).abs() < 1e-6);
     assert_eq!(s.ha_raw.as_deref(), Some("300"));
     assert!(!s.curve.is_empty() && s.curve_default);
-    // La source a reçu l'adresse, l'entité et le jeton du trousseau.
+    // The source received the address, entity and token from the keyring.
     let started = f.sources.started.lock().unwrap().clone();
     assert_eq!(
         started,
@@ -167,7 +167,7 @@ async fn token_found_at_startup_configures_auto_and_follows_light() {
             "secret-token".to_owned()
         )]
     );
-    // Le niveau appliqué suit la courbe pour 300 lx.
+    // The applied level follows the curve for 300 lx.
     f.rig.advance(Duration::from_secs(60)).await;
     let s = status(&f.rig).await;
     assert_eq!(s.master, s.auto_target);
@@ -215,7 +215,7 @@ async fn clearing_the_token_stops_the_source() {
 
 #[tokio::test(start_paused = true)]
 async fn token_is_bound_to_the_host() {
-    // T-SEC-04 : le jeton du premier serveur n'est jamais présenté à un autre.
+    // T-SEC-04: the first server's token is never presented to another.
     let f = fixture(CONFIG, Some(("ha.local:8123", "t"))).await;
     f.rig.advance(Duration::from_secs(5)).await;
     assert!(status(&f.rig).await.auto_configured);
@@ -261,7 +261,7 @@ async fn a_big_light_change_is_confirmed_then_applied() {
     f.rig.advance(Duration::from_secs(60)).await;
     let before = status(&f.rig).await;
     *f.sources.lux.lock().unwrap() = 20_000.0;
-    // Mesure suivante (repli REST), confirmation à ~3 s, puis rampe.
+    // Next measurement (REST fallback), confirmation at ~3 s, then ramp.
     f.rig.advance(Duration::from_secs(120)).await;
     let after = status(&f.rig).await;
     assert_ne!(before.auto_target, after.auto_target);

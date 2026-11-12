@@ -1,6 +1,6 @@
 [package]
 name = "ha2lux-tray"
-description = "Icône de zone de notification ha2lux."
+description = "ha2lux notification-area icon."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

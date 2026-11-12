@@ -1,4 +1,4 @@
-//! État affiché par l'icône et description du menu, sans aucune E/S.
+//! State displayed by the tray icon and menu description, with no I/O.
 
 use std::collections::HashMap;
 
@@ -6,40 +6,40 @@ use ha2lux_i18n::t;
 use ha2lux_ipc::DisplayDto;
 use zbus::zvariant::OwnedValue;
 
-/// Ce que l'icône sait du démon.
+/// What the tray icon knows about the daemon.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TrayState {
-    /// Le démon répond.
+    /// The daemon responds.
     pub reachable: bool,
-    /// Niveau maître.
+    /// Master level.
     pub master: Option<u8>,
     /// Source de base (`auto-lux`, `planning`, `static`).
     pub mode: String,
-    /// Pas de la molette.
+    /// Wheel step.
     pub step: u8,
-    /// Planning activé.
+    /// Schedule enabled.
     pub schedule_enabled: bool,
-    /// Nombre de points du planning.
+    /// Number of schedule points.
     pub schedule_points: u32,
-    /// Heure de reprise d'un planning suspendu.
+    /// Resume time of a suspended schedule.
     pub schedule_resume: Option<String>,
-    /// Atténuation d'inactivité activée.
+    /// Idle dimming enabled.
     pub idle_enabled: bool,
-    /// Niveau d'atténuation.
+    /// Dimming level.
     pub idle_level: u8,
-    /// Délai d'inactivité en minutes.
+    /// Idle delay in minutes.
     pub idle_minutes: u16,
-    /// Atténuation en cours.
+    /// Dimming in progress.
     pub dimmed: bool,
-    /// Auto-luminosité activée.
+    /// Auto-brightness enabled.
     pub auto_enabled: bool,
-    /// Auto-luminosité configurée.
+    /// Auto-brightness configured.
     pub auto_configured: bool,
-    /// Santé du lien Home Assistant.
+    /// Health of the Home Assistant link.
     pub ha_health: String,
-    /// Version du démon (vide si inconnue).
+    /// Daemon version (empty if unknown).
     pub daemon_version: String,
-    /// Écrans.
+    /// Displays.
     pub displays: Vec<DisplayDto>,
     /// Presets (nom, niveau).
     pub presets: Vec<(String, u32)>,
@@ -52,7 +52,7 @@ fn get<T: TryFrom<OwnedValue>>(map: &HashMap<String, OwnedValue>, key: &str) -> 
 }
 
 impl TrayState {
-    /// Construit l'état à partir de `Status()`, `List()` et `Presets()`.
+    /// Builds the state from `Status()`, `List()` and `Presets()`.
     pub fn from_daemon(
         status: &HashMap<String, OwnedValue>,
         displays: Vec<DisplayDto>,
@@ -86,68 +86,68 @@ impl TrayState {
         }
     }
 
-    /// L'auto-luminosité pilote actuellement la luminosité.
+    /// Auto-brightness is currently driving the brightness.
     pub fn auto_drives(&self) -> bool {
         self.auto_enabled && self.auto_configured
     }
 }
 
-/// Action déclenchée par un élément du menu.
+/// Action triggered by a menu item.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
-    /// Niveau maître.
+    /// Master level.
     SetMaster(u32),
-    /// Niveau propre d'un écran.
+    /// A display's own level.
     SetDisplay {
-        /// Identité de l'écran.
+        /// Display identity.
         id: String,
         /// Niveau 0-100.
         level: u32,
     },
-    /// Preset par nom.
+    /// Preset by name.
     Preset(String),
-    /// Active ou désactive une fonction (`schedule`, `idle-dim`, `auto`).
+    /// Enables or disables a feature (`schedule`, `idle-dim`, `auto`).
     Toggle(&'static str, bool),
-    /// Relance l'énumération.
+    /// Restarts enumeration.
     Rescan,
-    /// Ouvre le fichier de configuration.
+    /// Opens the configuration file.
     OpenSettings,
-    /// Fait relire la configuration au démon, puis la langue à l'icône.
+    /// Makes the daemon reload the configuration, then the tray icon reload the language.
     ReloadConfig,
-    /// Le menu s'ouvre (les relances des écrans en attente sont reportées).
+    /// The menu opens (retries for pending displays are postponed).
     MenuOpened,
-    /// Quitte l'icône (pas le démon).
+    /// Quits the tray icon (not the daemon).
     Quit,
 }
 
-/// Élément de menu, indépendant de `ksni`.
+/// Menu item, independent of `ksni`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Entry {
-    /// Élément simple.
+    /// Plain item.
     Item {
-        /// Libellé.
+        /// Label.
         label: String,
         /// Cliquable.
         enabled: bool,
         /// Action au clic.
         action: Option<Action>,
     },
-    /// Case à cocher.
+    /// Checkbox.
     Check {
-        /// Libellé.
+        /// Label.
         label: String,
-        /// Cochée.
+        /// Checked.
         checked: bool,
         /// Cliquable.
         enabled: bool,
         /// Action au clic.
         action: Action,
     },
-    /// Séparateur.
+    /// Separator.
     Separator,
     /// Sous-menu.
     Sub {
-        /// Libellé.
+        /// Label.
         label: String,
         /// Cliquable (ouvrable).
         enabled: bool,
@@ -172,12 +172,12 @@ fn note(label: impl Into<String>) -> Entry {
     }
 }
 
-/// Niveaux proposés dans les sous-menus (le popup de glisseurs de la spec n'existe pas en SNI).
-/// Version de l'icône (celle de tout le projet).
+/// Levels offered in the submenus (the spec's slider popup does not exist in SNI).
+/// Tray icon version (that of the whole project).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Sous-menu « À propos » : versions de l'icône et du démon, avec un avertissement
-/// si elles diffèrent (démon pas redémarré après une mise à jour).
+/// "À propos" submenu: tray icon and daemon versions, with a warning
+/// if they differ (daemon not restarted after an update).
 fn about(state: &TrayState) -> Entry {
     let mut entries = vec![note(t!("tray-about-tray", version = VERSION))];
     if !state.reachable {
@@ -231,7 +231,7 @@ fn health_label(health: &str) -> String {
     }
 }
 
-/// Description du menu pour cet état.
+/// Menu description for this state.
 pub fn build_menu(state: &TrayState) -> Vec<Entry> {
     let mut menu = Vec::new();
     if !state.reachable {
@@ -310,7 +310,7 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
     menu.push(Entry::Check {
         label: schedule_label,
         checked: state.schedule_enabled,
-        // Grisé tant que l'auto-luminosité pilote ; sans point, il n'y a rien à activer.
+        // Greyed out while auto-brightness is driving; with no point, there is nothing to enable.
         enabled: !state.auto_drives() && state.schedule_points > 0,
         action: Action::Toggle("schedule", !state.schedule_enabled),
     });
@@ -353,7 +353,7 @@ pub fn tooltip(state: &TrayState) -> String {
     }
 }
 
-/// Nom de l'icône (thème freedesktop).
+/// Icon name (freedesktop theme).
 pub fn icon_name(state: &TrayState) -> &'static str {
     if state.reachable {
         "display-brightness-symbolic"

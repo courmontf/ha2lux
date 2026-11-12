@@ -1,5 +1,5 @@
-//! Analyse des arguments (clap) : une seule sous-commande par appel, mêmes
-//! validations que le démon (qui reste l'autorité).
+//! Argument parsing (clap): a single subcommand per call, same
+//! validations as the daemon (which remains the authority).
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use ha2lux_i18n::t;
@@ -16,17 +16,17 @@ fn bounded(text: &str, low: u32, high: u32) -> Result<u32, String> {
     }
 }
 
-/// Niveau de 0 à 100.
+/// Level from 0 to 100.
 fn level(text: &str) -> Result<u32, String> {
     bounded(text, 0, 100)
 }
 
-/// Pas de 1 à 100.
+/// Step from 1 to 100.
 fn step(text: &str) -> Result<u32, String> {
     bounded(text, 1, 100)
 }
 
-/// Règle la luminosité de tous les écrans en parlant au démon `ha2luxd`.
+/// Sets the brightness of all displays by talking to the `ha2luxd` daemon.
 #[derive(Parser, Debug, PartialEq, Eq)]
 #[command(
     name = "ha2lux",
@@ -36,27 +36,27 @@ fn step(text: &str) -> Result<u32, String> {
     disable_version_flag = true
 )]
 pub struct Cli {
-    /// Affiche l'aide.
+    /// Shows the help.
     #[arg(short = 'h', long = "help", global = true, action = clap::ArgAction::Help, help_heading = "global")]
     #[allow(dead_code)]
     help: Option<bool>,
-    /// Affiche la version.
+    /// Shows the version.
     #[arg(short = 'V', long = "version", action = clap::ArgAction::Version)]
     #[allow(dead_code)]
     version: Option<bool>,
-    /// Sortie JSON (pour les scripts) ; les erreurs sont aussi renvoyées en JSON.
+    /// JSON output (for scripts); errors are also returned as JSON.
     #[arg(long, global = true, help_heading = "global")]
     pub json: bool,
-    /// Commande à exécuter (une seule par appel).
+    /// Command to run (only one per call).
     #[command(subcommand)]
     pub command: Command,
 }
 
-/// Sélecteur d'écran partagé par `set`, `up`, `down` et `get`.
+/// Display selector shared by `set`, `up`, `down` and `get`.
 #[derive(Args, Debug, PartialEq, Eq)]
 pub struct DisplayOpt {
-    /// Écran visé : numéro dans `ha2lux list`, nom exact ou sous-chaîne du nom
-    /// (insensible à la casse). Sans cette option, la commande agit sur le niveau maître.
+    /// Target display: number in `ha2lux list`, exact name or substring of the name
+    /// (case-insensitive). Without this option, the command acts on the master level.
     #[arg(long, value_name = "ÉCRAN", value_parser = non_empty)]
     pub display: Option<String>,
 }
@@ -69,133 +69,133 @@ fn non_empty(value: &str) -> Result<String, String> {
     }
 }
 
-/// Arguments de `set`.
+/// Arguments of `set`.
 #[derive(Args, Debug, PartialEq, Eq)]
 pub struct SetArgs {
-    /// Niveau de 0 à 100.
+    /// Level from 0 to 100.
     #[arg(value_name = "NIVEAU", value_parser = level)]
     pub level: u32,
-    /// Sélecteur d'écran.
+    /// Display selector.
     #[command(flatten)]
     pub target: DisplayOpt,
 }
 
-/// Arguments de `up` et `down`.
+/// Arguments of `up` and `down`.
 #[derive(Args, Debug, PartialEq, Eq)]
 pub struct StepArgs {
-    /// Pas de 1 à 100 (défaut : le réglage `general.step` du démon, 5).
+    /// Step from 1 to 100 (default: the daemon's `general.step` setting, 5).
     #[arg(value_name = "PAS", value_parser = step)]
     pub step: Option<u32>,
-    /// Sélecteur d'écran.
+    /// Display selector.
     #[command(flatten)]
     pub target: DisplayOpt,
 }
 
-/// Arguments de `get`.
+/// Arguments of `get`.
 #[derive(Args, Debug, PartialEq, Eq)]
 pub struct GetArgs {
-    /// Sélecteur d'écran.
+    /// Display selector.
     #[command(flatten)]
     pub target: DisplayOpt,
 }
 
-/// Interrupteur `on` / `off` (insensible à la casse).
+/// `on` / `off` switch (case-insensitive).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Toggle {
-    /// Activer.
+    /// Enable.
     On,
-    /// Désactiver.
+    /// Disable.
     Off,
 }
 
 impl Toggle {
-    /// Vrai pour `on`.
+    /// True for `on`.
     pub fn is_on(self) -> bool {
         self == Self::On
     }
 }
 
-/// Sous-commandes de `auto`.
+/// Subcommands of `auto`.
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum AutoCommand {
-    /// Active l'auto-luminosité.
+    /// Enables auto-brightness.
     On,
-    /// Désactive l'auto-luminosité.
+    /// Disables auto-brightness.
     Off,
-    /// Affiche l'état de l'auto-luminosité.
+    /// Shows the auto-brightness state.
     Status,
-    /// Oublie la courbe apprise.
+    /// Forgets the learned curve.
     ResetCurve,
-    /// Enregistre le jeton Home Assistant (lu sur l'entrée standard, jamais en argument).
+    /// Stores the Home Assistant token (read from standard input, never as an argument).
     Token {
-        /// Supprime le jeton enregistré au lieu d'en saisir un.
+        /// Deletes the stored token instead of entering one.
         #[arg(long)]
         clear: bool,
     },
-    /// Liste les capteurs d'éclairement de Home Assistant.
+    /// Lists the Home Assistant illuminance sensors.
     Sensors,
 }
 
-/// Commandes de `ha2lux`.
+/// Commands of `ha2lux`.
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum Command {
-    /// Définit le niveau (maître, ou celui d'un écran avec --display).
+    /// Sets the level (master, or that of a display with --display).
     Set(SetArgs),
-    /// Augmente le niveau d'un pas.
+    /// Raises the level by one step.
     Up(StepArgs),
-    /// Diminue le niveau d'un pas.
+    /// Lowers the level by one step.
     Down(StepArgs),
-    /// Affiche le niveau maître et ceux des écrans.
+    /// Shows the master level and those of the displays.
     Get(GetArgs),
-    /// Liste les écrans, numérotés.
+    /// Lists the displays, numbered.
     List,
-    /// Applique un preset (insensible à la casse).
+    /// Applies a preset (case-insensitive).
     Preset {
-        /// Nom du preset.
+        /// Preset name.
         name: String,
     },
-    /// Active ou désactive le planning horaire.
+    /// Enables or disables the time schedule.
     Schedule {
-        /// `on` ou `off`.
+        /// `on` or `off`.
         #[arg(value_enum, ignore_case = true, value_name = "ÉTAT")]
         state: Toggle,
     },
-    /// Active ou désactive l'atténuation à l'inactivité.
+    /// Enables or disables dimming on inactivity.
     IdleDim {
-        /// `on` ou `off`.
+        /// `on` or `off`.
         #[arg(value_enum, ignore_case = true, value_name = "ÉTAT")]
         state: Toggle,
     },
-    /// Auto-luminosité (capteur Home Assistant).
+    /// Auto-brightness (Home Assistant sensor).
     #[command(subcommand)]
     Auto(AutoCommand),
-    /// Relance l'énumération des écrans.
+    /// Restarts display enumeration.
     Rescan,
-    /// Recharge la configuration.
+    /// Reloads the configuration.
     Reload,
-    /// Diagnostic de la chaîne DDC/CI et backlight (sans démon).
+    /// Diagnostics of the DDC/CI and backlight chain (no daemon).
     Doctor {
-        /// Envoie de VRAIES trames DDC/CI (lecture de la luminosité) aux écrans externes.
+        /// Sends REAL DDC/CI frames (brightness read) to external displays.
         #[arg(long)]
         probe: bool,
     },
 }
 
-/// Résultat de l'analyse.
+/// Result of parsing.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Parsed {
-    /// Commande à exécuter.
+    /// Command to run.
     Run(Cli),
-    /// Aide ou version : texte à afficher, succès.
+    /// Help or version: text to display, success.
     Output(String),
 }
 
-/// Erreur d'usage : texte à afficher sur stderr, code de sortie 1.
+/// Usage error: text to display on stderr, exit code 1.
 #[derive(Debug, PartialEq, Eq)]
 pub struct UsageError(pub String);
 
-/// Met en minuscules la sous-commande (et la sous-sous-commande de `auto`) pour que
-/// `SET 5` fonctionne ; les valeurs, options et noms (preset, écran) sont laissés intacts.
+/// Lowercases the subcommand (and the sub-subcommand of `auto`) so that
+/// `SET 5` works; values, options and names (preset, display) are left untouched.
 fn normalize(args: Vec<String>) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
     let mut seen_command = false;
@@ -227,7 +227,7 @@ fn normalize(args: Vec<String>) -> Vec<String> {
     out
 }
 
-/// Modèle d'aide : description, usage, puis arguments.
+/// Help template: description, usage, then arguments.
 fn usage_template() -> String {
     format!(
         "{{about}}\n\n{} {{usage}}\n\n{{all-args}}\n",
@@ -235,16 +235,16 @@ fn usage_template() -> String {
     )
 }
 
-/// Texte du catalogue pour `key`, s'il existe.
+/// Catalog text for `key`, if any.
 fn catalog(key: &str) -> Option<String> {
     let text = t!(key);
     (text != key).then_some(text)
 }
 
-/// Applique à une commande, et récursivement à ses sous-commandes, les textes du
-/// catalogue : `cli-cmd-<chemin>` (description), `cli-arg-<chemin>-<id>` (aide
-/// d'un argument) et `cli-val-<chemin>-<id>` (nom de sa valeur). Le chemin de la
-/// racine est `root`, celui d'une sous-commande `auto token` est `auto-token`.
+/// Applies to a command, and recursively to its subcommands, the texts of the
+/// catalog: `cli-cmd-<path>` (description), `cli-arg-<path>-<id>` (help
+/// of an argument) and `cli-val-<path>-<id>` (name of its value). The path of the
+/// root is `root`, that of an `auto token` subcommand is `auto-token`.
 fn localize(command: clap::Command) -> clap::Command {
     localize_node(command, "root")
 }
@@ -292,12 +292,12 @@ fn localize_node(mut command: clap::Command, path: &str) -> clap::Command {
     command
 }
 
-/// La commande clap complète, dans la langue de l'utilisateur.
+/// The complete clap command, in the user's language.
 pub fn command() -> clap::Command {
     localize(Cli::command())
 }
 
-/// Message d'usage traduit à partir d'une erreur de clap.
+/// Translated usage message built from a clap error.
 fn friendly(error: &clap::Error) -> String {
     use clap::error::{ContextKind, ErrorKind};
     use std::error::Error;
@@ -359,7 +359,7 @@ fn friendly(error: &clap::Error) -> String {
     )
 }
 
-/// Analyse les arguments (sans le nom du programme).
+/// Parses the arguments (without the program name).
 pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, UsageError> {
     let args: Vec<String> = args.into_iter().collect();
     if args.is_empty() {
@@ -384,8 +384,8 @@ pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Result<Parsed, UsageErr
 mod tests {
     use super::*;
 
-    /// Chaque commande et chaque argument de la CLI a son texte dans le catalogue
-    /// (sinon l'aide afficherait la description de repli, non traduite).
+    /// Every command and argument of the CLI has its text in the catalog
+    /// (otherwise the help would show the untranslated fallback description).
     #[test]
     fn every_command_and_argument_has_a_catalog_entry() {
         fn walk(command: &clap::Command, path: &str, missing: &mut Vec<String>) {

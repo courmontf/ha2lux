@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# À lancer une fois après un « git clone » : active les hooks versionnés dans .githooks/.
+# Run once after a `git clone`: enables the versioned hooks in .githooks/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 chmod +x .githooks/* scripts/*.sh

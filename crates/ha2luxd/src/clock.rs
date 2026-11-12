@@ -1,21 +1,21 @@
-//! Horloges du démon : réelle (heure locale) et pilotée par le temps de tokio.
+//! Daemon clocks: real (local time) and driven by tokio time.
 
 use chrono::Timelike;
 use ha2lux_core::{Clock, MinuteOfDay, Now};
 use tokio::time::Instant;
 
 fn minute_of_day(minutes: u64) -> MinuteOfDay {
-    // `% 1440` garantit une valeur valide.
+    // `% 1440` guarantees a valid value.
     MinuteOfDay::new((minutes % 1440) as u16).unwrap_or_default()
 }
 
-/// Horloge de production : temps monotone de tokio, heure locale du système.
+/// Production clock: tokio monotonic time, system local time.
 pub struct SystemClock {
     start: Instant,
 }
 
 impl SystemClock {
-    /// Crée l'horloge (origine du temps monotone : maintenant).
+    /// Creates the clock (origin of the monotonic time: now).
     pub fn new() -> Self {
         Self {
             start: Instant::now(),
@@ -39,15 +39,15 @@ impl Clock for SystemClock {
     }
 }
 
-/// Horloge entièrement dérivée du temps de tokio : sous `start_paused`, le
-/// temps (et donc l'heure locale simulée) n'avance que par `tokio::time::advance`.
+/// Clock entirely derived from tokio time: under `start_paused`, the
+/// time (and thus the simulated local time) only advances through `tokio::time::advance`.
 pub struct TokioClock {
     start: Instant,
     start_minute: u16,
 }
 
 impl TokioClock {
-    /// Horloge démarrant à l'heure locale `start`.
+    /// Clock starting at local time `start`.
     pub fn new(start: MinuteOfDay) -> Self {
         Self {
             start: Instant::now(),

@@ -1,9 +1,9 @@
-//! L'exemple de configuration du README doit être accepté tel quel, sans réserve.
+//! The README's example configuration must be accepted as is, with no reservations.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use ha2lux_core::config::Config;
 
-/// Vérifie l'exemple de configuration d'un README (les deux langues).
+/// Checks a README's example configuration (both languages).
 fn check(file: &str, entity: &str) {
     let path = format!("{}/../../{file}", env!("CARGO_MANIFEST_DIR"));
     let readme = std::fs::read_to_string(path).unwrap();

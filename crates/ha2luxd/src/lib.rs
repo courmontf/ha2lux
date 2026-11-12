@@ -1,9 +1,9 @@
-//! Démon utilisateur ha2lux : acteur décideur, persistance atomique, service D-Bus.
+//! ha2lux user daemon: decision actor, atomic persistence, D-Bus service.
 //!
-//! Architecture (voir `specs/ARCHITECTURE.md`) : un **unique acteur décideur**
-//! possède la machine d'états ; D-Bus, minuteries, tâches d'écran et
-//! événements système lui envoient des messages. Aucune E/S bloquante dans
-//! l'acteur.
+//! Architecture (see `specs/ARCHITECTURE.md`): a **single decision actor**
+//! owns the state machine; D-Bus, timers, display tasks and
+//! system events send it messages. No blocking I/O in
+//! the actor.
 #![forbid(unsafe_code)]
 
 pub mod actor;

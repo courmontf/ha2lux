@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Prépare une version : calcule le prochain numéro d'après les commits (SemVer +
-# Conventional Commits), met à jour les fichiers, génère le CHANGELOG, commite et
-# crée le tag annotée vX.Y.Z. Ne pousse JAMAIS : la dernière commande est affichée.
+# Prepares a release: computes the next version number from the commits (SemVer +
+# Conventional Commits), updates the files, generates the CHANGELOG, commits and
+# creates the annotated tag vX.Y.Z. NEVER pushes: the final command is printed.
 #
-# Règles (Conventional Commits, https://www.conventionalcommits.org) depuis la dernière version :
-#   type!: …  ou  « BREAKING CHANGE: » dans le corps   -> majeur   (mineur tant que la version est 0.x)
-#   feat: …                                            -> mineur
-#   fix: …  ou  perf: …                                -> patch
-#   docs, chore, refactor, test, ci, build, style, i18n… ne déclenchent aucune version à eux seuls.
-# Tant que la version est 0.x, un changement incompatible ne passe pas à 1.0.0 : il incrémente
-# le mineur (convention de Cargo). Pour passer à 1.0.0, forcez : --bump major.
+# Rules (Conventional Commits, https://www.conventionalcommits.org) since the last version:
+#   type!: …  or  "BREAKING CHANGE:" in the body      -> major   (minor while the version is 0.x)
+#   feat: …                                            -> minor
+#   fix: …  or  perf: …                                -> patch
+#   docs, chore, refactor, test, ci, build, style, i18n… never trigger a version on their own.
+# While the version is 0.x, a breaking change does not go to 1.0.0: it bumps the
+# minor (Cargo convention). To go to 1.0.0, force it: --bump major.
 #
 # Usage : scripts/release.sh [--dry-run] [--yes] [--bump major|minor|patch]
-#   --dry-run  affiche la version et le changelog sans rien modifier
-#   --yes      ne demande pas de confirmation
-#   --bump X   impose le niveau (utile si les commits ne suivent pas la convention)
+#   --dry-run  prints the version and the changelog without changing anything
+#   --yes      does not ask for confirmation
+#   --bump X   forces the level (useful if the commits do not follow the convention)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -37,7 +37,7 @@ done
 
 die() { echo "erreur : $*" >&2; exit 1; }
 
-# --- État de départ -----------------------------------------------------------------------------
+# --- Starting state -----------------------------------------------------------------------------
 current=$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' Cargo.toml | head -1)
 [[ "$current" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || die "version actuelle illisible dans Cargo.toml : « $current »"
 major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
@@ -46,7 +46,7 @@ if [ "$dry" -eq 0 ] && [ -n "$(git status --porcelain)" ]; then
     die "l'arbre de travail n'est pas propre : commitez ou rangez vos changements d'abord"
 fi
 
-# Base : le tag de la version courante, sinon le dernier commit qui a changé la ligne de version.
+# Base: the tag of the current version, otherwise the last commit that changed the version line.
 if git rev-parse -q --verify "refs/tags/v$current" >/dev/null; then
     base=$(git rev-list -n1 "v$current")
 else
@@ -54,8 +54,8 @@ else
 fi
 [ -n "$base" ] || die "impossible de déterminer le point de départ"
 
-# --- Analyse des commits --------------------------------------------------------------------------
-level=0 # 0 aucun, 1 patch, 2 mineur, 3 majeur
+# --- Commit analysis --------------------------------------------------------------------------
+level=0 # 0 none, 1 patch, 2 minor, 3 major
 breaking=() feats=() fixes=() perfs=() others=()
 re='^([a-zA-Z]+)(\(([^)]+)\))?(!)?:[[:space:]]*(.+)$'
 while IFS= read -r -d $'\x1e' record; do
@@ -96,9 +96,9 @@ if [ -n "$force" ]; then
 fi
 [ "$level" -gt 0 ] || die "aucun commit « feat », « fix » ou « perf » depuis v$current (${#others[@]} autre(s)) : rien à publier automatiquement. Forcez avec --bump patch|minor|major."
 
-# --- Nouveau numéro ---------------------------------------------------------------------------------
+# --- New version number ---------------------------------------------------------------------------------
 if [ "$level" -eq 3 ] && [ "$major" -eq 0 ] && [ "$force" != "major" ]; then
-    level=2 # 0.x : un changement incompatible incrémente le mineur
+    level=2 # 0.x: a breaking change bumps the minor
 fi
 case "$level" in
     3) new="$((major + 1)).0.0" ;;
@@ -108,7 +108,7 @@ esac
 git rev-parse -q --verify "refs/tags/v$new" >/dev/null && die "le tag v$new existe déjà"
 
 # --- Changelog --------------------------------------------------------------------------------------
-section() { # titre, éléments…
+section() { # title, items…
     local title=$1; shift
     [ $# -gt 0 ] || return 0
     printf '\n### %s\n\n' "$title"
@@ -135,7 +135,7 @@ if [ "$yes" -eq 0 ]; then
     [[ "$answer" =~ ^[oOyY]$ ]] || { echo "annulé"; exit 1; }
 fi
 
-# --- Mise à jour des fichiers -----------------------------------------------------------------------
+# --- File updates -----------------------------------------------------------------------
 sed -i '/^\[workspace.package\]/,/^\[/{s/^version = ".*"$/version = "'"$new"'"/}' Cargo.toml
 [ -f packaging/rpm/ha2lux.spec ] && sed -i 's/^Version:\( *\).*/Version:\1'"$new"'/' packaging/rpm/ha2lux.spec
 [ -f packaging/arch/PKGBUILD ] && sed -i 's/^pkgver=.*/pkgver='"$new"'/' packaging/arch/PKGBUILD
@@ -144,7 +144,7 @@ grep -q "version = \"$new\"" Cargo.lock || die "Cargo.lock n'a pas été mis à 
 
 printf '%s\n' "$entry" >CHANGELOG.entry
 if [ -f CHANGELOG.md ]; then
-    # Insère la nouvelle version avant la première déjà présente (ou en fin de fichier).
+    # Inserts the new version before the first one already present (or at the end of the file).
     awk -v entry=CHANGELOG.entry '
         /^## \[/ && !done { while ((getline l < entry) > 0) print l; print ""; done = 1 }
         { print }

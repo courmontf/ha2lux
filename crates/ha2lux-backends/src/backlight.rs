@@ -1,8 +1,8 @@
-//! Backend backlight : lecture dans `/sys/class/backlight`, écriture par
-//! `SetBrightness` de logind (aucun droit root requis).
+//! Backlight backend: reads from `/sys/class/backlight`, writes through
+//! `SetBrightness` of logind (no root privileges required).
 //!
-//! L'écriture passe par le trait [`BrightnessSetter`] : [`LogindSetter`] en
-//! production, un faux dans les tests. Jamais d'écriture directe dans sysfs.
+//! Writing goes through the [`BrightnessSetter`] trait: [`LogindSetter`] in
+//! production, a fake in tests. Never a direct write to sysfs.
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -10,17 +10,17 @@ use std::path::{Path, PathBuf};
 use ha2lux_core::{BackendError, DisplayBackend, DisplayId, DisplayInfo, DisplayKind};
 use zbus::zvariant::OwnedObjectPath;
 
-/// Répertoire sysfs standard des rétroéclairages.
+/// Standard sysfs directory for backlights.
 pub const DEFAULT_SYSFS: &str = "/sys/class/backlight";
 
-/// Type de contrôleur déclaré par le noyau.
+/// Controller type declared by the kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BacklightType {
-    /// Interface firmware (ACPI vidéo) : à préférer.
+    /// Firmware interface (ACPI video): preferred.
     Firmware,
-    /// Interface de la plateforme.
+    /// Platform interface.
     Platform,
-    /// Registre matériel direct.
+    /// Direct hardware register.
     Raw,
     /// Type inconnu.
     Other,
@@ -37,16 +37,16 @@ impl BacklightType {
     }
 }
 
-/// Un rétroéclairage découvert dans sysfs.
+/// A backlight discovered in sysfs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BacklightInfo {
-    /// Nom du répertoire (ex. `intel_backlight`), repris par logind.
+    /// Directory name (e.g. `intel_backlight`), reused by logind.
     pub name: String,
-    /// Type déclaré.
+    /// Declared type.
     pub kind: BacklightType,
     /// `max_brightness`.
     pub max: u32,
-    /// Répertoire sysfs.
+    /// Sysfs directory.
     pub path: PathBuf,
 }
 
@@ -59,8 +59,8 @@ async fn read_u32(path: &Path) -> Option<u32> {
         .ok()
 }
 
-/// Énumère les rétroéclairages de `root`. Un répertoire absent donne une liste
-/// vide ; les entrées illisibles ou de maximum nul sont ignorées.
+/// Enumerates the backlights under `root`. A missing directory yields an empty
+/// list; unreadable entries or entries with a zero maximum are ignored.
 pub async fn scan(root: &Path) -> Vec<BacklightInfo> {
     let Ok(mut entries) = tokio::fs::read_dir(root).await else {
         return Vec::new();
@@ -92,15 +92,15 @@ pub async fn scan(root: &Path) -> Vec<BacklightInfo> {
     found
 }
 
-/// Rétroéclairage à préférer : firmware, puis platform, puis raw (ordre
-/// recommandé par le noyau), à égalité l'ordre alphabétique.
+/// Preferred backlight: firmware, then platform, then raw (order
+/// recommended by the kernel), ties broken alphabetically.
 pub fn preferred(list: &[BacklightInfo]) -> Option<&BacklightInfo> {
     list.iter().min_by_key(|b| (b.kind, &b.name))
 }
 
-/// Écriture de la luminosité d'un rétroéclairage.
+/// Writing the brightness of a backlight.
 pub trait BrightnessSetter: Send + 'static {
-    /// Applique la valeur brute au rétroéclairage `name`.
+    /// Applies the raw value to the backlight `name`.
     fn set(
         &mut self,
         name: &str,
@@ -108,7 +108,7 @@ pub trait BrightnessSetter: Send + 'static {
     ) -> impl Future<Output = Result<(), BackendError>> + Send;
 }
 
-/// Backend d'un panneau interne.
+/// Backend for an internal panel.
 pub struct BacklightBackend<S> {
     info: DisplayInfo,
     path: PathBuf,
@@ -117,7 +117,7 @@ pub struct BacklightBackend<S> {
 }
 
 impl<S: BrightnessSetter> BacklightBackend<S> {
-    /// Crée le backend d'un rétroéclairage découvert par [`scan`].
+    /// Creates the backend for a backlight discovered by [`scan`].
     pub fn new(device: &BacklightInfo, setter: S) -> Self {
         Self {
             info: DisplayInfo {
@@ -150,7 +150,7 @@ impl<S: BrightnessSetter> DisplayBackend for BacklightBackend<S> {
     }
 
     async fn read(&mut self) -> Result<u32, BackendError> {
-        // `actual_brightness` reflète l'état réel quand il existe.
+        // `actual_brightness` reflects the real state when it exists.
         for file in ["actual_brightness", "brightness"] {
             if let Some(value) = read_u32(&self.path.join(file)).await {
                 return Ok(value);
@@ -201,7 +201,7 @@ trait Session {
     fn set_brightness(&self, subsystem: &str, name: &str, brightness: u32) -> zbus::Result<()>;
 }
 
-/// Classe une erreur D-Bus par son nom (fonction pure, testable).
+/// Classifies a D-Bus error by its name (pure function, testable).
 pub fn classify_dbus_error(name: &str) -> fn(String) -> BackendError {
     match name {
         "org.freedesktop.DBus.Error.AccessDenied"
@@ -224,20 +224,20 @@ fn map_zbus_error(error: &zbus::Error) -> BackendError {
     }
 }
 
-/// Écriture via `org.freedesktop.login1.Session.SetBrightness`.
+/// Write through `org.freedesktop.login1.Session.SetBrightness`.
 ///
-/// La connexion et la session sont résolues paresseusement au premier
-/// `set` : une simple lecture ne touche jamais au bus.
+/// The connection and the session are resolved lazily on the first
+/// `set`: a plain read never touches the bus.
 #[derive(Default)]
 pub struct LogindSetter {
     connection: Option<zbus::Connection>,
     session: Option<OwnedObjectPath>,
 }
 
-/// Résout le chemin de l'objet logind de la session de l'utilisateur : la session
-/// `session_id` si elle est donnée (variable `XDG_SESSION_ID`), sinon la session
-/// graphique de l'utilisateur (`User.Display`), valable aussi depuis un service
-/// `systemd --user`, qui n'est pas dans un scope de session.
+/// Resolves the path of the logind object for the user's session: the session
+/// `session_id` if given (`XDG_SESSION_ID` variable), otherwise the user's
+/// graphical session (`User.Display`), which also works from a
+/// `systemd --user` service that is not in a session scope.
 pub async fn resolve_session_path(
     connection: &zbus::Connection,
     session_id: Option<&str>,
@@ -268,7 +268,7 @@ pub async fn resolve_session_path(
 }
 
 impl LogindSetter {
-    /// Crée un écrivain non connecté.
+    /// Creates an unconnected writer.
     pub fn new() -> Self {
         Self::default()
     }
@@ -313,7 +313,7 @@ impl BrightnessSetter for LogindSetter {
         match session.set_brightness("backlight", name, value).await {
             Ok(()) => Ok(()),
             Err(error) => {
-                // La session a pu changer (reconnexion) : on la résoudra de nouveau.
+                // The session may have changed (reconnection): it will be resolved again.
                 self.session = None;
                 Err(map_zbus_error(&error))
             }

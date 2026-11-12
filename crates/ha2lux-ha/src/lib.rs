@@ -1,7 +1,7 @@
-//! Client Home Assistant de ha2lux : lecture REST, WebSocket persistant, santé du lien.
+//! ha2lux's Home Assistant client: REST reads, persistent WebSocket, link health.
 //!
-//! Le jeton est traité comme un secret : type opaque ([`config::Token`]), jamais dans
-//! une URL, un journal ou un message d'erreur, jamais renvoyé après une redirection.
+//! The token is treated as a secret: opaque type ([`config::Token`]), never in
+//! a URL, a log or an error message, never resent after a redirect.
 #![forbid(unsafe_code)]
 
 pub mod backoff;

@@ -1,90 +1,90 @@
-//! Interface D-Bus de ha2lux, partagée par le démon, la CLI et le tray.
+//! ha2lux D-Bus interface, shared by the daemon, the CLI and the tray.
 //!
-//! Nom bien connu `org.ha2lux.Daemon`, objet `/org/ha2lux/Daemon`, interface
-//! `org.ha2lux.Daemon1`. Toute valeur reçue est **validée par le démon**, jamais
-//! seulement par le client.
+//! Well-known name `org.ha2lux.Daemon`, object `/org/ha2lux/Daemon`, interface
+//! `org.ha2lux.Daemon1`. Every received value is **validated by the daemon**, never
+//! only by the client.
 #![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};
 use zbus::zvariant::Type;
 
-/// Nom bien connu du démon sur le bus de session.
+/// Well-known name of the daemon on the session bus.
 pub const BUS_NAME: &str = "org.ha2lux.Daemon";
-/// Chemin de l'objet principal.
+/// Path of the main object.
 pub const OBJECT_PATH: &str = "/org/ha2lux/Daemon";
-/// Nom de l'interface.
+/// Interface name.
 pub const INTERFACE: &str = "org.ha2lux.Daemon1";
-/// Préfixe des noms d'erreurs D-Bus.
+/// Prefix of D-Bus error names.
 pub const ERROR_PREFIX: &str = "org.ha2lux.Error";
 
-/// Fonctions activables par `SetMode`.
+/// Features toggleable by `SetMode`.
 pub const FEATURE_SCHEDULE: &str = "schedule";
-/// Atténuation à l'inactivité.
+/// Dimming on inactivity.
 pub const FEATURE_IDLE_DIM: &str = "idle-dim";
-/// Auto-luminosité.
+/// Auto-brightness.
 pub const FEATURE_AUTO: &str = "auto";
 
-/// Un écran tel que le décrit `List()`.
+/// A display as described by `List()`.
 ///
-/// Signature D-Bus : `(ssssiuuu)` ; `level` vaut −1 quand il est inconnu.
+/// D-Bus signature: `(ssssiuuu)`; `level` is −1 when unknown.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct DisplayDto {
-    /// Identité stable (clé EDID).
+    /// Stable identity (EDID key).
     pub id: String,
-    /// Nom affiché.
+    /// Display name.
     pub name: String,
-    /// `internal` ou `external`.
+    /// `internal` or `external`.
     pub kind: String,
-    /// `controllable`, `unavailable`, `not-controllable` ou `absent`.
+    /// `controllable`, `unavailable`, `not-controllable` or `absent`.
     pub state: String,
-    /// Dernier niveau écran commandé (0-100), −1 si inconnu.
+    /// Last commanded display level (0-100), −1 if unknown.
     pub level: i32,
-    /// Borne basse de la plage.
+    /// Lower bound of the range.
     pub low: u32,
-    /// Borne haute de la plage.
+    /// Upper bound of the range.
     pub high: u32,
-    /// Maximum matériel brut (0 si inconnu).
+    /// Raw hardware maximum (0 if unknown).
     pub max_raw: u32,
 }
 
-/// Erreurs renvoyées par le démon, avec un nom D-Bus stable par variante.
+/// Errors returned by the daemon, with a stable D-Bus name per variant.
 #[derive(Debug, zbus::DBusError)]
 #[zbus(prefix = "org.ha2lux.Error")]
 pub enum DaemonError {
-    /// Erreur de transport D-Bus.
+    /// D-Bus transport error.
     #[zbus(error)]
     ZBus(zbus::Error),
-    /// Argument mal formé.
+    /// Malformed argument.
     InvalidArgs(String),
-    /// Valeur hors bornes.
+    /// Out-of-range value.
     OutOfRange(String),
-    /// Écran inconnu.
+    /// Unknown display.
     UnknownDisplay(String),
-    /// Écran connu mais indisponible.
+    /// Known but unavailable display.
     DisplayUnavailable(String),
-    /// Aucun écran contrôlable.
+    /// No controllable display.
     NoControllableDisplay(String),
-    /// Preset inconnu (le message liste les presets disponibles).
+    /// Unknown preset (the message lists the available presets).
     UnknownPreset(String),
-    /// Fonction non configurée (ex. auto-luminosité sans URL/jeton/entité).
+    /// Unconfigured feature (e.g. auto-brightness without URL/token/entity).
     NotConfigured(String),
-    /// Configuration invalide : l'ancienne est conservée.
+    /// Invalid configuration: the old one is kept.
     ConfigInvalid(String),
-    /// Erreur interne du démon.
+    /// Internal daemon error.
     Internal(String),
 }
 
-/// Catégorie d'une erreur D-Bus de ha2lux, pour le choix du code de sortie du client.
+/// Category of a ha2lux D-Bus error, for choosing the client's exit code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// Argument invalide ou hors bornes.
+    /// Invalid or out-of-range argument.
     Usage,
-    /// Commande refusée (écran ou preset inconnu, indisponible, non configuré…).
+    /// Command rejected (unknown or unavailable display or preset, unconfigured, etc.).
     Failed,
 }
 
-/// Classe une erreur zbus : `None` si ce n'est pas une erreur de ha2lux
-/// (démon absent, pas de réponse, transport).
+/// Classifies a zbus error: `None` if it is not a ha2lux error
+/// (daemon absent, no answer, transport).
 pub fn classify(error: &zbus::Error) -> Option<ErrorKind> {
     let zbus::Error::MethodError(name, _, _) = error else {
         return None;
@@ -99,10 +99,10 @@ pub fn classify(error: &zbus::Error) -> Option<ErrorKind> {
     }
 }
 
-/// Proxy zbus du démon (côté CLI et tray).
+/// zbus proxy of the daemon (CLI and tray side).
 ///
-/// Les éléments générés par la macro ne sont pas documentés un par un : voir le
-/// trait `Daemon` pour la description de chaque méthode.
+/// Items generated by the macro are not documented one by one: see the
+/// `Daemon` trait for the description of each method.
 pub mod proxy {
     #![allow(missing_docs)]
 
@@ -118,68 +118,68 @@ pub mod proxy {
         default_path = "/org/ha2lux/Daemon"
     )]
     pub trait Daemon {
-        /// Définit le niveau maître (0-100).
+        /// Sets the master level (0-100).
         fn set_master(&self, level: u32) -> zbus::Result<()>;
-        /// Variation relative du maître (−100..=100, non nulle).
+        /// Relative change of the master (−100..=100, non-zero).
         fn step_master(&self, delta: i32) -> zbus::Result<()>;
-        /// Niveau direct d'un écran (0-100 de son propre niveau).
+        /// Direct level of a display (0-100 of its own level).
         fn set_display(&self, id: &str, level: u32) -> zbus::Result<()>;
-        /// Plage d'un écran (`low`, `high` ≤ 100, normalisée par le démon).
+        /// Range of a display (`low`, `high` ≤ 100, normalized by the daemon).
         fn set_range(&self, id: &str, low: u32, high: u32) -> zbus::Result<()>;
-        /// Applique un preset (insensible à la casse).
+        /// Applies a preset (case-insensitive).
         fn apply_preset(&self, name: &str) -> zbus::Result<()>;
-        /// Active ou désactive `schedule`, `idle-dim` ou `auto`.
+        /// Enables or disables `schedule`, `idle-dim` or `auto`.
         fn set_mode(&self, feature: &str, on: bool) -> zbus::Result<()>;
-        /// Relance l'énumération des écrans.
+        /// Restarts display enumeration.
         fn rescan(&self) -> zbus::Result<()>;
-        /// Signale que l'interface interactive (popup) est ouverte : les relances
-        /// périodiques des écrans indisponibles sont reportées pendant ce temps.
+        /// Signals that the interactive interface (popup) is open: periodic
+        /// retries of unavailable displays are postponed in the meantime.
         fn set_ui_open(&self, open: bool) -> zbus::Result<()>;
-        /// Recharge la configuration.
+        /// Reloads the configuration.
         fn reload(&self) -> zbus::Result<()>;
-        /// Oublie la courbe apprise.
+        /// Forgets the learned curve.
         fn reset_curve(&self) -> zbus::Result<()>;
-        /// Annule le dernier apprentissage.
+        /// Undoes the last learning step.
         fn undo_learn(&self) -> zbus::Result<()>;
-        /// Enregistre le jeton Home Assistant (jamais en argument de ligne de commande).
+        /// Stores the Home Assistant token (never as a command-line argument).
         fn set_token(&self, token: &str) -> zbus::Result<()>;
-        /// Supprime le jeton Home Assistant.
+        /// Deletes the Home Assistant token.
         fn clear_token(&self) -> zbus::Result<()>;
-        /// Capteurs d'éclairement de Home Assistant : (entité, nom, pièce).
+        /// Home Assistant illuminance sensors: (entity, name, room).
         fn sensors(&self) -> zbus::Result<Vec<(String, String, String)>>;
-        /// Presets : (nom, niveau maître), dans l'ordre de la configuration.
+        /// Presets: (name, master level), in configuration order.
         fn presets(&self) -> zbus::Result<Vec<(String, u32)>>;
-        /// Liste des écrans.
+        /// List of displays.
         fn list(&self) -> zbus::Result<Vec<DisplayDto>>;
-        /// État détaillé du démon.
+        /// Detailed daemon state.
         fn status(&self) -> zbus::Result<HashMap<String, OwnedValue>>;
-        /// Demande l'arrêt propre du démon (utilisée par le remplacement d'instance).
+        /// Requests a clean daemon shutdown (used by instance replacement).
         fn quit(&self) -> zbus::Result<()>;
 
-        /// Le niveau maître a changé.
+        /// The master level changed.
         #[zbus(signal)]
         fn level_changed(&self, master: u32) -> zbus::Result<()>;
 
-        /// La liste ou l'état des écrans a changé.
+        /// The display list or state changed.
         #[zbus(signal)]
         fn displays_changed(&self) -> zbus::Result<()>;
 
-        /// La source de pilotage de base a changé (`auto-lux`, `planning`, `static`).
+        /// The base control source changed (`auto-lux`, `planning`, `static`).
         ///
-        /// Nom D-Bus `ModeChanged` ; la méthode Rust s'appelle `mode_switched` pour ne pas
-        /// entrer en conflit avec le flux de changements de la propriété `Mode`.
+        /// D-Bus name `ModeChanged`; the Rust method is called `mode_switched` so as not to
+        /// conflict with the change stream of the `Mode` property.
         #[zbus(signal, name = "ModeChanged")]
         fn mode_switched(&self, mode: &str) -> zbus::Result<()>;
 
-        /// Une écriture sur un écran a définitivement échoué.
+        /// A write to a display failed for good.
         #[zbus(signal)]
         fn display_failed(&self, id: &str, reason: &str) -> zbus::Result<()>;
 
-        /// Niveau maître courant, −1 s'il est inconnu.
+        /// Current master level, −1 if unknown.
         #[zbus(property)]
         fn master(&self) -> zbus::Result<i32>;
 
-        /// Source de pilotage de base : `auto-lux`, `planning` ou `static`.
+        /// Base control source: `auto-lux`, `planning` or `static`.
         #[zbus(property)]
         fn mode(&self) -> zbus::Result<String>;
     }

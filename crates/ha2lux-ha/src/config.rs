@@ -1,4 +1,4 @@
-//! Configuration du client : adresse validée, entité validée, jeton **opaque**.
+//! Client configuration: validated address, validated entity, **opaque** token.
 
 use std::fmt;
 use std::time::Duration;
@@ -8,23 +8,23 @@ use ha2lux_core::url::{UrlError, check_url};
 use reqwest::Url;
 use thiserror::Error;
 
-/// Jeton d'accès longue durée. N'implémente ni `Display` ni un `Debug` révélateur : il
-/// ne peut pas finir dans un journal ou un message d'erreur par accident.
+/// Long-lived access token. Implements neither `Display` nor a revealing `Debug`: it
+/// cannot end up in a log or an error message by accident.
 #[derive(Clone)]
 pub struct Token(String);
 
 impl Token {
-    /// Enveloppe un jeton.
+    /// Wraps a token.
     pub fn new(token: impl Into<String>) -> Self {
         Self(token.into())
     }
 
-    /// Valeur du jeton, pour l'en-tête d'autorisation **uniquement**.
+    /// Token value, for the authorization header **only**.
     pub fn expose(&self) -> &str {
         &self.0
     }
 
-    /// Le jeton est vide ou ne contient que des espaces.
+    /// The token is empty or contains only whitespace.
     pub fn is_blank(&self) -> bool {
         self.0.trim().is_empty()
     }
@@ -36,12 +36,12 @@ impl fmt::Debug for Token {
     }
 }
 
-/// Délais d'une requête (8 s par défaut : résolution, connexion, envoi, réception).
+/// Request timeouts (8 s by default: resolution, connection, send, receive).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Timeouts {
-    /// Établissement de la connexion.
+    /// Connection establishment.
     pub connect: Duration,
-    /// Requête complète.
+    /// Whole request.
     pub request: Duration,
 }
 
@@ -54,23 +54,23 @@ impl Default for Timeouts {
     }
 }
 
-/// Erreur de configuration.
+/// Configuration error.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ConfigError {
-    /// Adresse refusée.
+    /// Address rejected.
     #[error("invalid Home Assistant address: {0}")]
     Url(#[from] UrlError),
-    /// Identifiant d'entité invalide.
+    /// Invalid entity identifier.
     #[error("invalid entity identifier (expected: domain.object)")]
     Entity,
-    /// Jeton absent.
+    /// Token missing.
     #[error("access token missing")]
     NoToken,
 }
 
 impl ConfigError {
-    /// Message localisable pour un client (clé de catalogue + arguments) ; voir
-    /// [`ha2lux_i18n::wire`]. Le `Display` reste le texte pour les journaux.
+    /// Localizable message for a client (catalog key + arguments); see
+    /// [`ha2lux_i18n::wire`]. `Display` remains the text for logs.
     pub fn to_wire(&self) -> String {
         use ha2lux_i18n::wire::encode;
         match self {
@@ -81,16 +81,16 @@ impl ConfigError {
     }
 }
 
-/// Paramètres de connexion à Home Assistant.
+/// Connection parameters for Home Assistant.
 #[derive(Clone)]
 pub struct HaConfig {
-    /// Adresse de base (http ou https, sans identifiants).
+    /// Base address (http or https, no credentials).
     pub base_url: Url,
-    /// Entité du capteur (`sensor.xxx`).
+    /// Sensor entity (`sensor.xxx`).
     pub entity: String,
-    /// Jeton d'accès.
+    /// Access token.
     pub token: Token,
-    /// Délais.
+    /// Timeouts.
     pub timeouts: Timeouts,
 }
 
@@ -105,11 +105,11 @@ impl fmt::Debug for HaConfig {
 }
 
 impl HaConfig {
-    /// Valide et construit la configuration (même règles que la configuration du démon).
+    /// Validates and builds the configuration (same rules as the daemon configuration).
     pub fn new(url: &str, entity: &str, token: Token) -> Result<Self, ConfigError> {
         let checked = check_url(url)?;
-        // `check_url` a validé la forme ; l'analyse ne peut échouer que pour une raison que
-        // la validation couvre déjà, on la traite tout de même comme une adresse invalide.
+        // `check_url` validated the form; parsing can only fail for a reason that
+        // validation already covers, so we still treat it as an invalid address.
         let base_url = Url::parse(&checked.url).map_err(|_| UrlError::InvalidHost)?;
         if !is_valid_entity_id(entity) {
             return Err(ConfigError::Entity);
@@ -125,7 +125,7 @@ impl HaConfig {
         })
     }
 
-    /// Adresse du point d'accès REST de l'entité.
+    /// Address of the entity's REST endpoint.
     pub fn state_url(&self) -> Url {
         let mut url = self.base_url.clone();
         if let Ok(mut segments) = url.path_segments_mut() {
@@ -136,10 +136,10 @@ impl HaConfig {
         url
     }
 
-    /// Adresse du WebSocket (`ws://` ou `wss://`, selon le schéma de base).
+    /// WebSocket address (`ws://` or `wss://`, depending on the base scheme).
     pub fn websocket_url(&self) -> Url {
         let mut url = self.base_url.clone();
-        // Le schéma est http ou https (validé) : le changement ne peut pas échouer.
+        // The scheme is http or https (validated): the switch cannot fail.
         let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
         let _ = url.set_scheme(scheme);
         if let Ok(mut segments) = url.path_segments_mut() {

@@ -1,8 +1,8 @@
-//! Banc de test : horloge virtuelle + écrans factices + exécuteur de commandes.
+//! Test bench: virtual clock + mock displays + command executor.
 //!
-//! Aucun `sleep` réel : le temps n'avance que par [`World::advance`], qui
-//! déclenche dans l'ordre les minuteries demandées par la machine d'états et
-//! l'évaluation du planning toutes les 60 s.
+//! No real `sleep`: time only advances through [`World::advance`], which
+//! fires, in order, the timers requested by the state machine and
+//! the schedule evaluation every 60 s.
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::{BTreeMap, VecDeque};
@@ -17,7 +17,7 @@ use ha2lux_core::{
     DisplayId, DisplayKind, Event, InitialState, Listed, MinuteOfDay, Range, VirtualClock,
 };
 
-/// Pilote une future qui se termine immédiatement (backend factice).
+/// Drives a future that completes immediately (mock backend).
 pub fn block_on<F: Future>(future: F) -> F::Output {
     let mut future = pin!(future);
     let mut cx = Context::from_waker(Waker::noop());
@@ -45,7 +45,7 @@ struct Sim {
     responds: bool,
 }
 
-/// Une écriture observée sur un écran factice.
+/// A write observed on a mock display.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Written {
     pub at_ms: u64,
@@ -68,7 +68,7 @@ pub struct World {
     reapply_due: Option<u64>,
     next_planning_tick: u64,
     pub planning_ticks: bool,
-    /// Levées de suspension du planning : instant et suspension levée.
+    /// Schedule suspension lifts: instant and suspension lifted.
     pub resumes: Vec<(ha2lux_core::Now, ha2lux_core::Suspension)>,
 }
 
@@ -93,7 +93,7 @@ impl World {
         }
     }
 
-    /// Branche un écran factice (max 100 : brut = niveau) à un niveau initial.
+    /// Plugs in a mock display (max 100: raw = level) at an initial level.
     pub fn plug(&mut self, name: &str, level: u8) -> MockControl {
         self.plug_with_max(name, 100, level)
     }
@@ -132,7 +132,7 @@ impl World {
         }
     }
 
-    /// Niveau écran actuel (0-100) de l'écran factice, d'après son brut.
+    /// Current display level (0-100) of the mock display, from its raw value.
     pub fn level_of(&self, name: &str) -> u8 {
         let s = &self.sims[&id(name)];
         ha2lux_core::hw::level_from_raw(s.control.raw(), s.max)
@@ -146,7 +146,7 @@ impl World {
             .collect()
     }
 
-    /// Simule des écrans qui se remettent à 100 % (réveil de veille).
+    /// Simulates displays that reset to 100% (wake from sleep).
     pub fn reset_hardware(&mut self) {
         for sim in self.sims.values() {
             sim.control.set_raw(sim.max);
@@ -157,7 +157,7 @@ impl World {
         self.log.clear();
     }
 
-    /// Énumération : sonde chaque écran présent via le backend factice.
+    /// Enumeration: probes each present display through the mock backend.
     pub fn rescan(&mut self) -> Result<(), ControlError> {
         let mut listed = Vec::new();
         for (display, sim) in &mut self.sims {
@@ -181,7 +181,7 @@ impl World {
         self.send(Event::DisplaysListed(listed))
     }
 
-    /// Envoie un événement et exécute, de proche en proche, ses commandes.
+    /// Sends an event and executes its commands, step by step.
     pub fn send(&mut self, event: Event) -> Result<(), ControlError> {
         let now = self.clock.now();
         let before = self.ctl.status().suspension;
@@ -233,8 +233,8 @@ impl World {
         }
     }
 
-    /// Fait avancer le temps virtuel en déclenchant, dans l'ordre, les
-    /// minuteries échues (y compris celles tombant pile sur la cible).
+    /// Advances virtual time by firing, in order, the
+    /// expired timers (including those falling exactly on the target).
     pub fn advance(&mut self, ms: u64) {
         let target = self.clock.now().ms + ms;
         loop {
@@ -284,7 +284,7 @@ pub fn range(low: i64, high: i64) -> Range {
     Range::normalized(low, high)
 }
 
-/// Évite un avertissement `unused` si un test n'utilise pas ce type d'erreur.
+/// Avoids an `unused` warning if a test does not use this error type.
 pub fn transient() -> BackendError {
     BackendError::Transient("test".to_owned())
 }

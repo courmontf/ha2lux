@@ -1,34 +1,34 @@
-//! Lecture d'un état Home Assistant : valeur, horodatage, ancienneté.
+//! Reading of a Home Assistant state: value, timestamp, age.
 
 use ha2lux_core::is_valid_lux;
 use serde::Deserialize;
 
 use crate::error::HaError;
 
-/// Valeur d'une lecture.
+/// Value of a reading.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ReadingValue {
-    /// Éclairement valide (fini, 0 à 1 000 000 lx).
+    /// Valid illuminance (finite, 0 to 1,000,000 lx).
     Lux(f64),
-    /// Réponse réussie **sans mesure** : `unavailable`, `unknown`, texte, valeur invalide.
+    /// Successful response **with no measurement**: `unavailable`, `unknown`, text, invalid value.
     NoValue,
 }
 
-/// Une lecture de l'entité.
+/// A reading of the entity.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reading {
-    /// Valeur utilisable, ou absence de mesure.
+    /// Usable value, or no measurement.
     pub value: ReadingValue,
-    /// État brut tel qu'affiché par Home Assistant (borné, pour le panneau d'état).
+    /// Raw state as displayed by Home Assistant (bounded, for the status panel).
     pub raw_state: String,
-    /// Horodatage de la mesure, en millisecondes Unix : `last_reported` s'il existe (mis à
-    /// jour à chaque rapport, même sans changement de valeur), sinon `last_updated`.
+    /// Timestamp of the measurement, in Unix milliseconds: `last_reported` if present (updated
+    /// on every report, even without a value change), otherwise `last_updated`.
     pub observed_ms: Option<i64>,
 }
 
 impl Reading {
-    /// Ancienneté de la mesure à `now_unix_ms` (0 si l'horodatage manque : instant de
-    /// réception ; jamais négative si l'horloge de Home Assistant est en avance).
+    /// Age of the measurement at `now_unix_ms` (0 if the timestamp is missing: time of
+    /// receipt; never negative if Home Assistant's clock is ahead).
     pub fn age_ms(&self, now_unix_ms: i64) -> u64 {
         self.observed_ms.map_or(0, |observed| {
             u64::try_from(now_unix_ms.saturating_sub(observed)).unwrap_or(0)
@@ -49,7 +49,7 @@ fn parse_time(text: &Option<String>) -> Option<i64> {
         .map(|t| t.timestamp_millis())
 }
 
-/// Interprète le texte d'un état.
+/// Interprets the text of a state.
 pub fn parse_state_text(state: &str) -> ReadingValue {
     match state.trim().parse::<f64>() {
         Ok(value) if is_valid_lux(value) => ReadingValue::Lux(value),
@@ -67,7 +67,7 @@ fn state_text(value: Option<serde_json::Value>) -> Result<String, HaError> {
     }
 }
 
-/// Interprète le corps JSON d'un `GET /api/states/<entité>` ou un `to_state` d'événement.
+/// Interprets the JSON body of a `GET /api/states/<entity>` or an event's `to_state`.
 pub fn parse_state_body(body: &[u8]) -> Result<Reading, HaError> {
     let parsed: StateBody =
         serde_json::from_slice(body).map_err(|_| HaError::Protocol("invalid JSON".to_owned()))?;
@@ -79,7 +79,7 @@ pub fn parse_state_body(body: &[u8]) -> Result<Reading, HaError> {
     })
 }
 
-/// Interprète un objet d'état déjà décodé (événement WebSocket).
+/// Interprets an already decoded state object (WebSocket event).
 pub fn parse_state_value(value: &serde_json::Value) -> Result<Reading, HaError> {
     let bytes =
         serde_json::to_vec(value).map_err(|_| HaError::Protocol("unreadable state".to_owned()))?;

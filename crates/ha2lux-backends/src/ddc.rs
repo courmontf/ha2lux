@@ -1,16 +1,16 @@
-//! Backend DDC/CI (écrans externes) : Get/Set VCP 0x10 par `/dev/i2c-N`.
+//! DDC/CI backend (external displays): Get/Set VCP 0x10 through `/dev/i2c-N`.
 //!
-//! Toutes les opérations I²C sont bloquantes : elles tournent dans
-//! `spawn_blocking`, sous le **verrou du bus**, avec les délais du protocole
-//! (≈ 40 ms entre requête et réponse, ≈ 50 ms entre commandes).
+//! All I²C operations are blocking: they run in
+//! `spawn_blocking`, under the **bus lock**, with the protocol delays
+//! (about 40 ms between request and reply, about 50 ms between commands).
 //!
-//! Si une opération dépasse le timeout de la tâche d'écran, son thread peut
-//! rester bloqué dans le noyau. Le backend le sait : tant qu'elle n'est pas
-//! terminée, toute nouvelle opération échoue tout de suite (un seul thread
-//! abandonné par écran au maximum) et le verrou du bus reste tenu.
+//! If an operation exceeds the display task's timeout, its thread may
+//! stay stuck in the kernel. The backend knows this: until it has
+//! finished, any new operation fails immediately (at most one abandoned
+//! thread per display) and the bus lock stays held.
 //!
-//! Utilisation : appeler [`DdcBackend::probe`] **avant** de confier le backend
-//! à la tâche d'écran, pour connaître le maximum réel.
+//! Usage: call [`DdcBackend::probe`] **before** handing the backend
+//! to the display task, to learn the real maximum.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -24,16 +24,16 @@ use ha2lux_core::{BackendError, DisplayBackend, DisplayInfo};
 
 use crate::i2c::{BusLocks, I2cDevice, I2cOpener, classify_io_error};
 
-/// Délais du protocole DDC/CI (à confirmer sur le matériel).
+/// DDC/CI protocol delays (to be confirmed on real hardware).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DdcTimings {
-    /// Attente entre l'envoi d'une requête et la lecture de la réponse.
+    /// Wait between sending a request and reading the reply.
     pub reply_delay: Duration,
-    /// Intervalle minimal entre deux commandes vers le même écran.
+    /// Minimum interval between two commands to the same display.
     pub command_gap: Duration,
-    /// Attente entre deux tentatives d'une même lecture.
+    /// Wait between two attempts at the same read.
     pub retry_delay: Duration,
-    /// Tentatives pour une sonde ou une lecture.
+    /// Attempts for a probe or a read.
     pub read_attempts: u32,
 }
 
@@ -48,7 +48,7 @@ impl DdcTimings {
         }
     }
 
-    /// Aucun délai (tests avec écran factice : pas de `sleep` réel).
+    /// No delay (tests with a mock display: no real `sleep`).
     pub fn none() -> Self {
         Self {
             reply_delay: Duration::ZERO,
@@ -59,7 +59,7 @@ impl DdcTimings {
     }
 }
 
-/// Temps restant à attendre avant la prochaine commande.
+/// Time left to wait before the next command.
 pub fn remaining_gap(since_last_command: Duration, gap: Duration) -> Duration {
     gap.saturating_sub(since_last_command)
 }
@@ -84,7 +84,7 @@ fn map_ddc_error(error: DdcError) -> BackendError {
     }
 }
 
-/// Exécute une opération (bloquant). Le périphérique est (ré)ouvert au besoin.
+/// Runs an operation (blocking). The device is (re)opened as needed.
 fn perform(
     state: &mut DeviceState,
     opener: &dyn I2cOpener,
@@ -111,7 +111,7 @@ fn perform(
     };
     state.last_done = Some(Instant::now());
     if matches!(result, Err(BackendError::Disconnected(_))) {
-        state.device = None; // refermé ; rouvert (peut-être sur un autre bus) au rescan
+        state.device = None; // closed; reopened (possibly on another bus) at rescan
     }
     result
 }
@@ -146,7 +146,7 @@ fn transact(
     }
 }
 
-/// Écran externe piloté en DDC/CI.
+/// External display driven over DDC/CI.
 pub struct DdcBackend {
     info: DisplayInfo,
     bus: u32,
@@ -158,7 +158,7 @@ pub struct DdcBackend {
 }
 
 impl DdcBackend {
-    /// Crée le backend d'un écran relié au bus `bus`. `info.max` sera fixé par `probe`.
+    /// Creates the backend for a display attached to bus `bus`. `info.max` will be set by `probe`.
     pub fn new(
         info: DisplayInfo,
         bus: u32,
@@ -177,7 +177,7 @@ impl DdcBackend {
         }
     }
 
-    /// Une opération sous verrou du bus, dans un thread bloquant.
+    /// One operation under the bus lock, in a blocking thread.
     async fn run(&self, op: Op) -> Result<Option<VcpReading>, BackendError> {
         if self.busy.load(Ordering::Acquire) {
             return Err(BackendError::Transient(
@@ -185,8 +185,8 @@ impl DdcBackend {
             ));
         }
         let guard = Arc::clone(&self.bus_lock).lock_owned().await;
-        // Positionné seulement une fois le verrou obtenu : un appel annulé pendant
-        // l'attente du verrou ne laisse donc jamais `busy` bloqué.
+        // Set only once the lock is obtained: a call cancelled while
+        // waiting for the lock therefore never leaves `busy` stuck.
         self.busy.store(true, Ordering::Release);
         let (state, opener, busy) = (
             Arc::clone(&self.state),
@@ -195,8 +195,8 @@ impl DdcBackend {
         );
         let (bus, timings) = (self.bus, self.timings);
         let handle = tokio::task::spawn_blocking(move || {
-            // Le verrou du bus reste tenu jusqu'à la fin réelle de l'opération,
-            // même si l'appelant a abandonné l'attente (timeout).
+            // The bus lock stays held until the operation really ends,
+            // even if the caller gave up waiting (timeout).
             let _guard = guard;
             let result = {
                 let mut state = state.lock().unwrap_or_else(PoisonError::into_inner);
@@ -234,8 +234,8 @@ impl DisplayBackend for DdcBackend {
         &self.info
     }
 
-    /// Contrôlable ⇔ lecture valide du VCP 0x10 **et** maximum > 0. Une réponse
-    /// « null message » juste après un réveil n'est qu'un échec transitoire.
+    /// Controllable iff a valid read of VCP 0x10 **and** maximum > 0. A
+    /// "null message" reply right after a wake-up is only a transient failure.
     async fn probe(&mut self) -> Result<DisplayInfo, BackendError> {
         let reading = self.get_with_retries(self.timings.read_attempts).await?;
         if reading.maximum == 0 {

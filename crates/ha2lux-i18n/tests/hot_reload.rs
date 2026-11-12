@@ -1,7 +1,7 @@
-//! Changement de langue à chaud (rechargement de la configuration depuis le tray).
+//! Hot language switching (configuration reload from the tray).
 //!
-//! L'état de langue est global au processus, et `.cargo/config.toml` fixe `HA2LUX_LANG` pour
-//! tous les tests : le test se relance donc lui-même avec un environnement vide.
+//! Language state is process-global, and `.cargo/config.toml` sets `HA2LUX_LANG` for
+//! all tests: the test therefore relaunches itself with an empty environment.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::path::Path;
@@ -44,27 +44,27 @@ fn the_language_follows_the_configuration_file_without_restart() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("config.toml");
 
-    // Session sans langue : repli anglais.
+    // Session with no language: English fallback.
     assert_eq!(quit(), "Quit");
     let before = current();
 
-    // Le fichier passe en français : la langue change tout de suite.
+    // The file switches to French: the language changes immediately.
     write(&file, "[general]\nlanguage = \"fr\"\n");
     assert!(apply_file(&file));
     assert_eq!(quit(), "Quitter");
-    // Un localisateur déjà obtenu garde sa langue (pas de texte à moitié traduit).
+    // A localizer already obtained keeps its language (no half-translated text).
     assert_eq!(before.lang(), "en");
 
-    // Réappliquer la même langue ne signale aucun changement.
+    // Reapplying the same language reports no change.
     assert!(!apply_file(&file));
 
-    // Fichier mal formé ou absent : la langue actuelle est conservée.
+    // Malformed or missing file: the current language is kept.
     write(&file, "[general\nlanguage = ");
     assert!(!apply_file(&file));
     assert!(!apply_file(&dir.path().join("absent.toml")));
     assert_eq!(quit(), "Quitter");
 
-    // `auto` (ou plus de clé) redonne la langue de la session.
+    // `auto` (or no key anymore) restores the session language.
     write(&file, "[general]\nlanguage = \"auto\"\n");
     assert!(apply_file(&file));
     assert_eq!(quit(), "Quit");

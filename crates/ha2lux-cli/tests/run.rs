@@ -1,4 +1,4 @@
-//! Exécution des commandes contre un faux démon : sorties, JSON, codes de sortie.
+//! Running commands against a fake daemon: outputs, JSON, exit codes.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::cell::RefCell;

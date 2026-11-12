@@ -1,40 +1,40 @@
-//! Planning horaire : points, interpolation, suspension (spec §6).
+//! Hourly schedule: points, interpolation, suspension (spec §6).
 
 use std::fmt;
 
 use thiserror::Error;
 
-/// Nombre maximal de points d'un planning.
+/// Maximum number of points in a schedule.
 pub const MAX_POINTS: usize = 24;
 
 const DAY: i64 = 1440;
 
-/// Erreurs de construction ou de validation d'un planning.
+/// Schedule construction or validation errors.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ScheduleError {
-    /// Heure mal formée : seul `HH:MM` strict (24 h) est accepté.
+    /// Malformed time: only strict `HH:MM` (24 h) is accepted.
     #[error("invalid time \"{0}\": expected format HH:MM (00:00 to 23:59)")]
     InvalidTime(String),
-    /// Minute hors de `0..1440`.
+    /// Minute outside `0..1440`.
     #[error("invalid minute of the day: {0} (expected 0 to 1439)")]
     MinuteOutOfRange(u16),
-    /// Niveau hors de `0..=100`.
+    /// Level outside `0..=100`.
     #[error("invalid level: {0} (expected 0 to 100)")]
     LevelOutOfRange(u8),
-    /// Deux points à la même minute.
+    /// Two points at the same minute.
     #[error("two points at the same time: {0}")]
     DuplicateTime(MinuteOfDay),
-    /// Trop de points.
+    /// Too many points.
     #[error("trop de points : {0} (maximum {MAX_POINTS})")]
     TooManyPoints(usize),
 }
 
-/// Minute du jour, `0..=1439`.
+/// Minute of the day, `0..=1439`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MinuteOfDay(u16);
 
 impl MinuteOfDay {
-    /// Construit une minute du jour ; refuse `>= 1440`.
+    /// Builds a minute of the day; rejects `>= 1440`.
     pub fn new(minute: u16) -> Result<Self, ScheduleError> {
         if i64::from(minute) < DAY {
             Ok(Self(minute))
@@ -43,8 +43,8 @@ impl MinuteOfDay {
         }
     }
 
-    /// Analyse stricte de `HH:MM` : exactement 5 caractères, ni espace ni
-    /// signe, `HH ≤ 23`, `MM ≤ 59`.
+    /// Strict parsing of `HH:MM`: exactly 5 characters, no space or
+    /// sign, `HH ≤ 23`, `MM ≤ 59`.
     pub fn parse(text: &str) -> Result<Self, ScheduleError> {
         let invalid = || ScheduleError::InvalidTime(text.to_owned());
         let bytes = text.as_bytes();
@@ -66,7 +66,7 @@ impl MinuteOfDay {
         Ok(Self(hours * 60 + minutes))
     }
 
-    /// Valeur en minutes depuis minuit.
+    /// Value in minutes since midnight.
     pub fn minutes(self) -> u16 {
         self.0
     }
@@ -78,23 +78,23 @@ impl fmt::Display for MinuteOfDay {
     }
 }
 
-/// Point de planning : une heure et un niveau maître.
+/// Schedule point: a time and a master level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Point {
-    /// Heure du point.
+    /// Time of the point.
     pub time: MinuteOfDay,
-    /// Niveau maître 0-100.
+    /// Master level 0-100.
     pub level: u8,
 }
 
-/// Planning validé : trié, sans doublon d'heure, au plus [`MAX_POINTS`] points.
+/// Validated schedule: sorted, no duplicate times, at most [`MAX_POINTS`] points.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Schedule {
     points: Vec<Point>,
 }
 
 impl Schedule {
-    /// Valide et trie les points.
+    /// Validates and sorts the points.
     pub fn new(mut points: Vec<Point>) -> Result<Self, ScheduleError> {
         if points.len() > MAX_POINTS {
             return Err(ScheduleError::TooManyPoints(points.len()));
@@ -109,28 +109,28 @@ impl Schedule {
         Ok(Self { points })
     }
 
-    /// Points triés par heure.
+    /// Points sorted by time.
     pub fn points(&self) -> &[Point] {
         &self.points
     }
 
-    /// Vrai si le planning n'a aucun point (rien à appliquer).
+    /// True if the schedule has no points (nothing to apply).
     pub fn is_empty(&self) -> bool {
         self.points.is_empty()
     }
 
-    /// Niveau maître à une minute donnée, ou `None` sans point.
+    /// Master level at a given minute, or `None` with no points.
     ///
-    /// Interpolation linéaire entre points consécutifs, avec bouclage du
-    /// dernier au premier point à travers minuit. Arrondi au plus proche ;
-    /// sur une égalité exacte, l'écart au point de départ s'éloigne de zéro.
+    /// Linear interpolation between consecutive points, wrapping from the
+    /// last to the first point across midnight. Rounded to nearest;
+    /// on an exact tie, the gap from the start point is rounded away from zero.
     pub fn value_at(&self, now: MinuteOfDay) -> Option<u8> {
         let first = *self.points.first()?;
         if self.points.len() == 1 {
             return Some(first.level);
         }
         let now = i64::from(now.0);
-        // Dernier point dont l'heure est <= now ; sinon, le dernier point de la veille.
+        // Last point whose time is <= now; otherwise, the last point of the previous day.
         let (start_minute, start) =
             match self.points.iter().rposition(|p| i64::from(p.time.0) <= now) {
                 Some(i) => (i64::from(self.points[i].time.0), self.points[i]),
@@ -156,9 +156,9 @@ impl Schedule {
         Some(crate::range::clamp_percent(value))
     }
 
-    /// Premier point d'ancrage **strictement postérieur** à `after`, en
-    /// bouclant sur le lendemain. Avec un seul point à `after`, renvoie ce
-    /// même point (le lendemain).
+    /// First anchor point **strictly after** `after`, wrapping
+    /// to the next day. With a single point at `after`, returns that
+    /// same point (the next day).
     pub fn next_point_after(&self, after: MinuteOfDay) -> Option<MinuteOfDay> {
         let first = self.points.first()?;
         Some(
@@ -170,7 +170,7 @@ impl Schedule {
     }
 }
 
-/// Suspension du planning après une action manuelle (spec §6.4).
+/// Schedule suspension after a manual action (spec §6.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Suspension {
     start: MinuteOfDay,
@@ -178,8 +178,8 @@ pub struct Suspension {
 }
 
 impl Suspension {
-    /// Suspend à `start` ; reprise au prochain point strictement postérieur.
-    /// `None` si le planning est vide (rien à suspendre).
+    /// Suspends at `start`; resumes at the next point strictly after.
+    /// `None` if the schedule is empty (nothing to suspend).
     pub fn begin(schedule: &Schedule, start: MinuteOfDay) -> Option<Self> {
         Some(Self {
             start,
@@ -187,28 +187,28 @@ impl Suspension {
         })
     }
 
-    /// Construit une suspension à partir de ses deux instants (rechargement
-    /// depuis le fichier d'état).
+    /// Builds a suspension from its two instants (reload
+    /// from the state file).
     pub fn from_parts(start: MinuteOfDay, resume: MinuteOfDay) -> Self {
         Self { start, resume }
     }
 
-    /// Instant de la suspension.
+    /// Instant of the suspension.
     pub fn start(&self) -> MinuteOfDay {
         self.start
     }
 
-    /// Instant de reprise prévu.
+    /// Planned resume instant.
     pub fn resume(&self) -> MinuteOfDay {
         self.resume
     }
 
-    /// Vrai si le planning doit reprendre à `now` : l'arc orienté
-    /// `start → now` atteint ou dépasse l'arc `start → resume` sur le cercle de
-    /// 24 h. Cas dégénéré `resume == start` : reprise immédiate.
+    /// True if the schedule must resume at `now`: the oriented arc
+    /// `start → now` reaches or exceeds the arc `start → resume` on the
+    /// 24 h circle. Degenerate case `resume == start`: immediate resume.
     ///
-    /// L'arc est calculé modulo 24 h : l'appelant évalue au moins une fois par
-    /// minute, donc ne saute jamais une journée entière.
+    /// The arc is computed modulo 24 h: the caller evaluates at least once per
+    /// minute, so it never skips an entire day.
     pub fn should_resume(&self, now: MinuteOfDay) -> bool {
         let arc = |from: MinuteOfDay, to: MinuteOfDay| {
             (i64::from(to.0) - i64::from(from.0)).rem_euclid(DAY)

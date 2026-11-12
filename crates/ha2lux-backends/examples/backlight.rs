@@ -1,4 +1,4 @@
-//! Démonstration locale du backend backlight, sans démon.
+//! Local demonstration of the backlight backend, without the daemon.
 //!
 //! ```text
 //! cargo run -p ha2lux-backends --example backlight -- list
@@ -6,8 +6,8 @@
 //! cargo run -p ha2lux-backends --example backlight -- set 40 [--device NOM] [--floor N]
 //! ```
 //!
-//! `list` et `get` sont en lecture seule et ne touchent pas au bus D-Bus.
-//! `set` écrit réellement la luminosité via logind (`SetBrightness`), sans root.
+//! `list` and `get` are read-only and do not touch the D-Bus bus.
+//! `set` really writes the brightness through logind (`SetBrightness`), without root.
 
 use std::path::Path;
 use std::process::ExitCode;

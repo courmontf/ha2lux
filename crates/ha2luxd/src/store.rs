@@ -1,10 +1,10 @@
-//! Lecture et écriture des fichiers de configuration et d'état.
+//! Reading and writing of the configuration and state files.
 //!
-//! Toute écriture est **atomique** : fichier temporaire dans le même
-//! répertoire, `fsync`, renommage, `fsync` du répertoire. Un arrêt brutal
-//! (`kill -9`, coupure) laisse donc l'ancien fichier intact, jamais un fichier
-//! tronqué (T-CFG-09). Fonctions bloquantes : à appeler depuis un thread
-//! dédié, jamais depuis l'acteur décideur.
+//! Every write is **atomic**: temporary file in the same
+//! directory, `fsync`, rename, `fsync` of the directory. A sudden stop
+//! (`kill -9`, power loss) therefore leaves the old file intact, never a
+//! truncated file (T-CFG-09). Blocking functions: to be called from a
+//! dedicated thread, never from the decision actor.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
@@ -17,21 +17,21 @@ use thiserror::Error;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Erreurs de lecture ou d'écriture.
+/// Read or write errors.
 #[derive(Debug, Error)]
 pub enum StoreError {
-    /// Erreur d'entrée/sortie sur un fichier.
+    /// I/O error on a file.
     #[error("{path} : {source}")]
     Io {
-        /// Fichier concerné.
+        /// File concerned.
         path: PathBuf,
         /// Cause.
         source: io::Error,
     },
-    /// Contenu invalide (syntaxe, version).
+    /// Invalid content (syntax, version).
     #[error("{path} : {error}")]
     Config {
-        /// Fichier concerné.
+        /// File concerned.
         path: PathBuf,
         /// Cause.
         error: ConfigError,
@@ -46,14 +46,14 @@ fn temp_path(path: &Path) -> PathBuf {
     path.with_file_name(format!(".{name}.tmp.{}.{n}", std::process::id()))
 }
 
-/// Écrit `bytes` dans `path` de façon atomique.
+/// Writes `bytes` to `path` atomically.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_atomic_with(path, bytes, || Ok(()))
 }
 
-/// Comme [`write_atomic`], avec un point d'arrêt juste avant le renommage
-/// (simulation d'une interruption dans les tests). En cas d'erreur, le
-/// fichier temporaire est supprimé et l'original reste intact.
+/// Like [`write_atomic`], with a stop point right before the rename
+/// (simulating an interruption in tests). On error, the
+/// temporary file is deleted and the original stays intact.
 pub fn write_atomic_with(
     path: &Path,
     bytes: &[u8],
@@ -74,17 +74,17 @@ pub fn write_atomic_with(
         file.sync_all()?;
         before_rename()?;
         fs::rename(&temp, path)?;
-        // Rend le renommage durable.
+        // Makes the rename durable.
         File::open(parent)?.sync_all()
     })();
     if result.is_err() {
-        // Meilleur effort : le fichier temporaire peut déjà avoir disparu.
+        // Best effort: the temporary file may already be gone.
         let _ = fs::remove_file(&temp);
     }
     result
 }
 
-/// Supprime les fichiers temporaires laissés par un arrêt brutal. Renvoie leur nombre.
+/// Deletes the temporary files left by a sudden stop. Returns their count.
 pub fn cleanup_stale_temps(path: &Path) -> usize {
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         return 0;
@@ -100,7 +100,7 @@ pub fn cleanup_stale_temps(path: &Path) -> usize {
         .count()
 }
 
-/// Copie `path` vers `path.bak` (écriture atomique) s'il existe.
+/// Copies `path` to `path.bak` (atomic write) if it exists.
 pub fn backup(path: &Path) -> io::Result<()> {
     match fs::read(path) {
         Ok(bytes) => {
@@ -113,8 +113,8 @@ pub fn backup(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Lit et valide la configuration. Une syntaxe invalide ou une version trop
-/// récente renvoient une erreur et **ne modifient jamais** le fichier.
+/// Reads and validates the configuration. Invalid syntax or a version that is too
+/// recent return an error and **never modify** the file.
 pub fn read_config(path: &Path) -> Result<Loaded, StoreError> {
     let text = fs::read_to_string(path).map_err(|source| StoreError::Io {
         path: path.to_owned(),
@@ -126,23 +126,23 @@ pub fn read_config(path: &Path) -> Result<Loaded, StoreError> {
     })
 }
 
-/// Résultat du chargement au démarrage.
+/// Result of loading at startup.
 #[derive(Debug)]
 pub enum ConfigLoad {
-    /// Fichier absent : créé avec les valeurs par défaut (T-CFG-01).
+    /// File missing: created with the default values (T-CFG-01).
     Created(Loaded),
-    /// Fichier lu.
+    /// File read.
     Loaded(Loaded),
-    /// Syntaxe invalide : valeurs par défaut en mémoire, fichier préservé et
-    /// jamais réécrit tant qu'il n'est pas corrigé puis rechargé.
+    /// Invalid syntax: default values in memory, file preserved and
+    /// never rewritten until it is fixed and then reloaded.
     Invalid {
-        /// Raison, sans extrait du fichier.
+        /// Reason, without an excerpt of the file.
         error: ConfigError,
     },
 }
 
-/// Charge la configuration, ou la crée si elle n'existe pas. Une version de
-/// schéma plus récente est refusée (erreur), fichier intact (T-CFG-08).
+/// Loads the configuration, or creates it if it does not exist. A more recent
+/// schema version is rejected (error), file intact (T-CFG-08).
 pub fn load_or_create_config(path: &Path) -> Result<ConfigLoad, StoreError> {
     cleanup_stale_temps(path);
     match fs::read_to_string(path) {
@@ -176,19 +176,19 @@ pub fn load_or_create_config(path: &Path) -> Result<ConfigLoad, StoreError> {
     }
 }
 
-/// Résultat du chargement de l'état.
+/// Result of loading the state.
 #[derive(Debug, Default)]
 pub struct StateLoad {
-    /// État lu (ou vide).
+    /// State read (or empty).
     pub state: State,
-    /// Remarques de lecture.
+    /// Read notes.
     pub issues: Vec<ConfigIssue>,
-    /// Le fichier était illisible : il a été mis de côté en `.corrupt`.
+    /// The file was unreadable: it was set aside as `.corrupt`.
     pub set_aside: bool,
 }
 
-/// Charge l'état. Un fichier illisible ou d'une version inconnue est conservé
-/// sous `state.toml.corrupt` (jamais écrasé en silence) et l'état repart vide.
+/// Loads the state. An unreadable file or one of an unknown version is kept
+/// as `state.toml.corrupt` (never silently overwritten) and the state starts empty.
 pub fn load_state(path: &Path) -> StateLoad {
     cleanup_stale_temps(path);
     let Ok(text) = fs::read_to_string(path) else {
@@ -204,8 +204,8 @@ pub fn load_state(path: &Path) -> StateLoad {
             tracing::warn!(%error, "state file unreadable: kept as .corrupt, empty state");
             let mut aside = path.as_os_str().to_owned();
             aside.push(".corrupt");
-            // Si la mise de côté échoue, on ne supprime rien : l'ancien fichier sera
-            // simplement remplacé au prochain enregistrement, comme avant.
+            // If setting it aside fails, nothing is deleted: the old file will simply be
+            // replaced at the next save, as before.
             let moved = fs::rename(path, PathBuf::from(aside)).is_ok();
             StateLoad {
                 set_aside: moved,

@@ -1,4 +1,4 @@
-//! Faux moniteur DDC/CI : décode les vraies trames et répond comme un écran.
+//! Fake DDC/CI monitor: decodes real frames and replies like a display.
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::{HashMap, VecDeque};
@@ -29,7 +29,7 @@ pub struct State {
     pub hung: bool,
 }
 
-/// Instrumentation d'un bus : combien d'opérations s'y chevauchent.
+/// Instrumentation of a bus: how many operations overlap on it.
 #[derive(Default)]
 pub struct Bus {
     pub active: AtomicUsize,
@@ -41,7 +41,7 @@ pub struct MonitorControl {
     pub state: Arc<Mutex<State>>,
     pub gate: Arc<(Mutex<bool>, Condvar)>,
     pub bus: Arc<Bus>,
-    /// Notifié quand un thread vient de se bloquer sur l'écran coincé.
+    /// Notified when a thread has just blocked on the stuck display.
     pub entered: Arc<tokio::sync::Notify>,
 }
 
@@ -82,7 +82,7 @@ impl MonitorControl {
             .count()
     }
 
-    /// Bloque (`true`) ou libère (`false`) les écritures : écran coincé dans le noyau.
+    /// Blocks (`true`) or releases (`false`) writes: display stuck in the kernel.
     pub fn hang(&self, hung: bool) {
         *self.gate.0.lock().unwrap_or_else(PoisonError::into_inner) = !hung;
         self.with(|s| s.hung = hung);
@@ -108,12 +108,12 @@ impl I2cDevice for FakeMonitor {
             .bus
             .max_active
             .fetch_max(now_active, Ordering::SeqCst);
-        // Attente active (pas de sleep) : rend un chevauchement probable sans verrou.
+        // Busy wait (no sleep): makes an overlap likely without a lock.
         let start = Instant::now();
         while start.elapsed() < Duration::from_micros(500) {
             std::hint::spin_loop();
         }
-        // Écran coincé : on attend la libération.
+        // Stuck display: wait for the release.
         {
             let (flag, cvar) = &*control.gate;
             let mut open = flag.lock().unwrap_or_else(PoisonError::into_inner);
@@ -191,7 +191,7 @@ impl I2cDevice for FakeEdid {
     }
 }
 
-/// Ouvreur factice : un moniteur DDC/CI (0x37) et/ou un EDID (0x50) par bus.
+/// Mock opener: a DDC/CI monitor (0x37) and/or an EDID (0x50) per bus.
 #[derive(Default)]
 pub struct FakeOpener {
     monitors: Mutex<HashMap<u32, MonitorControl>>,
@@ -239,7 +239,7 @@ impl FakeOpener {
             .len()
     }
 
-    /// Toutes les ouvertures `(bus, adresse)` effectuées, dans l'ordre.
+    /// All `(bus, address)` opens performed, in order.
     pub fn opened(&self) -> Vec<(u32, u16)> {
         self.opened
             .lock()
@@ -270,7 +270,7 @@ impl I2cOpener for FakeOpener {
                 .get(&bus)
             {
                 Some(edid) => Ok(Box::new(FakeEdid(edid.clone()))),
-                None => Err(os(ENXIO)), // aucun écran sur ce port
+                None => Err(os(ENXIO)), // no display on this port
             };
         }
         match self

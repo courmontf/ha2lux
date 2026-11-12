@@ -1,5 +1,5 @@
-//! Faux serveur Home Assistant : HTTP, HTTPS (certificat auto-signé) et WebSocket,
-//! sur des sockets locaux réels.
+//! Fake Home Assistant server: HTTP, HTTPS (self-signed certificate) and WebSocket,
+//! on real local sockets.
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::net::SocketAddr;
@@ -30,7 +30,7 @@ pub struct Reply {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
-    /// Pas de `Content-Length` : le corps est envoyé en flux puis la connexion est fermée.
+    /// No `Content-Length`: the body is streamed, then the connection is closed.
     pub streamed: bool,
     pub hang: bool,
 }
@@ -139,13 +139,13 @@ async fn write_reply(stream: &mut (impl AsyncWriteExt + Unpin), reply: &Reply) {
         head.push_str(&format!("Content-Length: {}\r\n", reply.body.len()));
     }
     head.push_str("\r\n");
-    // Le client peut avoir abandonné : les erreurs d'écriture n'ont pas d'importance ici.
+    // The client may have given up: write errors do not matter here.
     let _ = stream.write_all(head.as_bytes()).await;
     let _ = stream.write_all(&reply.body).await;
     let _ = stream.shutdown().await;
 }
 
-/// Serveur HTTP : `handler(requête, rang)` renvoie la réponse.
+/// HTTP server: `handler(request, rank)` returns the response.
 pub async fn http_server(
     handler: impl Fn(&Recorded, usize) -> Reply + Send + Sync + 'static,
 ) -> Server {
@@ -176,7 +176,7 @@ pub async fn http_server(
     Server { addr, requests }
 }
 
-/// Serveur HTTPS avec un certificat **auto-signé** (inconnu du système : doit être refusé).
+/// HTTPS server with a **self-signed** certificate (unknown to the system: must be rejected).
 pub async fn https_server_with_self_signed_cert() -> Server {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio_rustls::TlsAcceptor;
@@ -207,7 +207,7 @@ pub async fn https_server_with_self_signed_cert() -> Server {
             };
             let (acceptor, log, served) = (acceptor.clone(), Arc::clone(&log), Arc::clone(&served));
             tokio::spawn(async move {
-                // Une poignée de main refusée par le client (certificat inconnu) échoue ici.
+                // A handshake rejected by the client (unknown certificate) fails here.
                 let Ok(mut tls) = acceptor.accept(stream).await else {
                     return;
                 };

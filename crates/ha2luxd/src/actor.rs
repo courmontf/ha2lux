@@ -1,13 +1,13 @@
-//! Acteur décideur : l'**unique** propriétaire de l'état de pilotage.
+//! Decision actor: the **sole** owner of the control state.
 //!
-//! Tout le reste (D-Bus, minuteries, tâches d'écran, événements système) lui
-//! envoie des messages ; lui seul appelle la machine d'états et exécute ses
-//! commandes. Conséquences voulues :
-//! - les requêtes sont **sérialisées** (jamais d'entrelacement d'écritures) ;
-//! - **aucune E/S bloquante** dans l'acteur : le matériel est piloté par des
-//!   tâches d'écran, les fichiers par un écrivain dédié, la découverte par une
-//!   tâche à part ;
-//! - un état publié (`watch`) que l'interface lit sans jamais verrouiller.
+//! All the rest (D-Bus, timers, display tasks, system events) sends it
+//! messages; only it calls the state machine and executes its
+//! commands. Intended consequences:
+//! - requests are **serialized** (writes never interleave);
+//! - **no blocking I/O** in the actor: hardware is driven by
+//!   display tasks, files by a dedicated writer, discovery by a
+//!   separate task;
+//! - a published state (`watch`) that the interface reads without ever locking.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
@@ -36,72 +36,72 @@ use crate::paths::Paths;
 use crate::store::{self, ConfigLoad, StoreError};
 use ha2lux_ha::source::{HaSource, Output};
 
-/// Nombre maximal d'écrans mémorisés dans la configuration.
+/// Maximum number of displays remembered in the configuration.
 const MAX_REMEMBERED_DISPLAYS: usize = 32;
-/// Capacité de la boîte aux lettres de l'acteur.
+/// Capacity of the actor's mailbox.
 const MAILBOX: usize = 256;
 
-/// Signaux à émettre vers les clients D-Bus.
+/// Signals to emit to D-Bus clients.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Signal {
-    /// Le maître a changé.
+    /// The master has changed.
     LevelChanged(u8),
-    /// La liste ou l'état des écrans a changé.
+    /// The list or state of the displays has changed.
     DisplaysChanged,
-    /// La source de base a changé.
+    /// The base source has changed.
     ModeChanged(String),
-    /// Une écriture a définitivement échoué.
+    /// A write has permanently failed.
     DisplayFailed {
-        /// Écran concerné.
+        /// Display concerned.
         id: String,
-        /// Raison lisible.
+        /// Human-readable reason.
         reason: String,
     },
 }
 
-/// Dépendances de l'acteur.
+/// Actor dependencies.
 pub struct Deps {
-    /// Fichiers de configuration et d'état.
+    /// Configuration and state files.
     pub paths: Paths,
-    /// Source d'écrans.
+    /// Display source.
     pub hardware: Arc<dyn Hardware>,
-    /// Horloge (réelle, ou pilotée par tokio dans les tests).
+    /// Clock (real, or driven by tokio in tests).
     pub clock: Arc<dyn Clock + Send + Sync>,
-    /// Destination des signaux D-Bus.
+    /// Destination of the D-Bus signals.
     pub signals: mpsc::UnboundedSender<Signal>,
-    /// Réglages de tâche d'écran imposés (tests) ; `None` : selon le type d'écran.
+    /// Forced display-task settings (tests); `None`: depends on the display type.
     pub task_config: Option<TaskConfig>,
-    /// Période d'évaluation du planning.
+    /// Schedule evaluation period.
     pub planning_tick: Duration,
-    /// Home Assistant (jeton et source de mesures) ; `None` : auto-luminosité indisponible.
+    /// Home Assistant (token and measurement source); `None`: auto-brightness unavailable.
     pub ha: Option<HaDeps>,
 }
 
-/// Échec du démarrage.
+/// Startup failure.
 #[derive(Debug, Error)]
 pub enum StartError {
-    /// Fichier illisible ou version non prise en charge.
+    /// Unreadable file or unsupported version.
     #[error(transparent)]
     Store(#[from] StoreError),
-    /// Planning invalide (ne doit pas arriver après la validation).
+    /// Invalid schedule (must not happen after validation).
     #[error("invalid schedule: {0}")]
     Schedule(#[from] ScheduleError),
 }
 
-/// Événement venu du système (logind, udev…), transmis à l'acteur.
+/// Event coming from the system (logind, udev...), forwarded to the actor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SystemEvent {
-    /// Préparation de la veille : plus aucune écriture matérielle (DDC en veille = blocage).
+    /// Preparing for sleep: no more hardware writes (DDC during sleep = hang).
     Suspend,
-    /// Retour de veille.
+    /// Resume from sleep.
     Resume,
-    /// Session verrouillée : rien à faire (comme l'extinction d'écran).
+    /// Session locked: nothing to do (like screen blanking).
     Lock,
-    /// Session déverrouillée.
+    /// Session unlocked.
     Unlock,
-    /// La session devient active ou inactive (changement de session, multi-session).
+    /// The session becomes active or inactive (session switch, multi-session).
     SessionActive(bool),
-    /// Branchement ou débranchement d'écran (DRM, nœud i2c).
+    /// Display plugged or unplugged (DRM, i2c node).
     Hotplug,
 }
 
@@ -123,7 +123,7 @@ enum Msg {
     RescanTimer,
     System(SystemEvent),
     Flush(FlushKind),
-    /// Résultat de la lecture du jeton pour cette adresse et cette entité.
+    /// Result of reading the token for this address and this entity.
     Token {
         key: String,
         entity: String,
@@ -132,7 +132,7 @@ enum Msg {
     Shutdown(oneshot::Sender<()>),
 }
 
-/// Poignée clonable vers l'acteur (D-Bus, adaptateurs système, tests).
+/// Cloneable handle to the actor (D-Bus, system adapters, tests).
 #[derive(Clone)]
 pub struct DaemonHandle {
     tx: mpsc::Sender<Msg>,
@@ -141,7 +141,7 @@ pub struct DaemonHandle {
 }
 
 impl DaemonHandle {
-    /// Envoie une requête et attend sa réponse. Les requêtes sont sérialisées.
+    /// Sends a request and waits for its reply. Requests are serialized.
     pub async fn request(&self, request: Request) -> Result<Reply, ApiError> {
         let (reply, answer) = oneshot::channel();
         self.tx
@@ -151,7 +151,7 @@ impl DaemonHandle {
         answer.await.map_err(|_| ApiError::Stopped)?
     }
 
-    /// Injecte un événement système (réveil, inactivité, mesure de lux…).
+    /// Injects a system event (wake-up, idle, lux measurement...).
     pub async fn send_event(&self, event: Event) -> Result<(), ApiError> {
         self.tx
             .send(Msg::Event(event))
@@ -159,7 +159,7 @@ impl DaemonHandle {
             .map_err(|_| ApiError::Stopped)
     }
 
-    /// Injecte un événement système (logind, udev).
+    /// Injects a system event (logind, udev).
     pub async fn send_system(&self, event: SystemEvent) -> Result<(), ApiError> {
         self.tx
             .send(Msg::System(event))
@@ -167,41 +167,41 @@ impl DaemonHandle {
             .map_err(|_| ApiError::Stopped)
     }
 
-    /// Dernier état publié (lecture sans verrou).
+    /// Latest published state (lock-free read).
     pub fn snapshot(&self) -> Arc<StatusSnapshot> {
         Arc::clone(&self.snapshot.borrow())
     }
 
-    /// Flux des états publiés.
+    /// Stream of published states.
     pub fn subscribe(&self) -> watch::Receiver<Arc<StatusSnapshot>> {
         self.snapshot.clone()
     }
 
-    /// Attend l'arrêt de l'acteur (demande `Quit`, arrêt ou fin de la boîte aux lettres).
+    /// Waits for the actor to stop (`Quit` request, shutdown or end of the mailbox).
     pub async fn wait_closed(&self) {
         let mut closed = self.closed.clone();
-        // Une erreur signifie que l'acteur a disparu : il est bien arrêté.
+        // An error means the actor is gone: it is indeed stopped.
         let _ = closed.wait_for(|c| *c).await;
     }
 }
 
-/// L'acteur en cours d'exécution.
+/// The running actor.
 pub struct Daemon {
     handle: DaemonHandle,
     join: JoinHandle<()>,
 }
 
 impl Daemon {
-    /// Poignée clonable.
+    /// Cloneable handle.
     pub fn handle(&self) -> DaemonHandle {
         self.handle.clone()
     }
 
-    /// Arrêt propre : état écrit, écritures matérielles finales faites, tâches arrêtées.
+    /// Clean shutdown: state written, final hardware writes done, tasks stopped.
     pub async fn shutdown(self) {
         let (done, finished) = oneshot::channel();
         if self.handle.tx.send(Msg::Shutdown(done)).await.is_ok() {
-            // L'acteur peut s'être arrêté entre-temps (Quit) : sans importance.
+            // The actor may have stopped in the meantime (Quit): irrelevant.
             let _ = finished.await;
         }
         let _ = self.join.await;
@@ -247,7 +247,7 @@ impl Persister {
     }
 
     fn write(&self, job: WriteJob) {
-        // Le récepteur ne disparaît qu'à l'arrêt.
+        // The receiver only goes away at shutdown.
         let _ = self.tx.send(job);
     }
 
@@ -269,9 +269,9 @@ struct Runtime {
     max: u32,
     bus: Option<u32>,
     floor: u32,
-    /// Dernier niveau commandé et sa valeur brute.
+    /// Last commanded level and its raw value.
     last: Option<(u8, u32)>,
-    /// Dernière valeur brute confirmée écrite.
+    /// Last raw value confirmed as written.
     confirmed_raw: Option<u32>,
 }
 
@@ -292,23 +292,23 @@ struct Actor {
     config_due: Option<Instant>,
     rescan: RescanManager,
     armed_deadline: Option<u64>,
-    /// Veille ou session inactive : aucune écriture matérielle.
+    /// Sleep or inactive session: no hardware writes.
     suspended: bool,
     first_discovery_done: bool,
-    /// Compteurs cumulés des tâches d'écran déjà arrêtées (ils ne disparaissent pas avec l'écran).
+    /// Cumulative counters of display tasks already stopped (they do not vanish with the display).
     retired: ha2lux_backends::task::DisplayStats,
-    /// Les écritures en cours sont des ré-applications (réveil, liste acceptée) : forcées.
+    /// Writes in progress are re-applications (wake-up, accepted list): forced.
     force_writes: bool,
     snapshot_tx: watch::Sender<Arc<StatusSnapshot>>,
     previous: Arc<StatusSnapshot>,
     ha: HaState,
 }
 
-/// État de la liaison Home Assistant côté démon.
+/// State of the Home Assistant link on the daemon side.
 #[derive(Default)]
 struct HaState {
     source: Option<HaSource>,
-    /// Adresse et entité de la source en cours.
+    /// Address and entity of the current source.
     source_key: Option<(String, String)>,
     token_present: bool,
     raw: Option<String>,
@@ -340,8 +340,8 @@ fn controller_config(
     ControllerConfig::from_config(config, auto_configured)
 }
 
-/// Démarre le démon : charge configuration et état, lance l'acteur, la
-/// première énumération et l'évaluation périodique du planning.
+/// Starts the daemon: loads configuration and state, launches the actor, the
+/// first enumeration and the periodic schedule evaluation.
 pub async fn start(deps: Deps) -> Result<Daemon, StartError> {
     let paths = deps.paths.clone();
     let (config, config_error) = {
@@ -423,7 +423,7 @@ pub async fn start(deps: Deps) -> Result<Daemon, StartError> {
     actor.request_scan(RescanTrigger::Startup, 0);
     actor.publish();
 
-    // Évaluation périodique du planning (la première, juste après la première énumération).
+    // Periodic schedule evaluation (the first one, right after the first enumeration).
     let ticker = tx.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval_at(Instant::now() + planning_tick, planning_tick);
@@ -460,7 +460,7 @@ impl Actor {
                     match message {
                         Msg::Shutdown(done) => {
                             self.stop().await;
-                            // Le demandeur peut avoir abandonné l'attente.
+                            // The requester may have given up waiting.
                             let _ = done.send(());
                             break;
                         }
@@ -507,12 +507,12 @@ impl Actor {
         let tx = self.tx.clone();
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
-            // L'acteur peut s'être arrêté entre-temps.
+            // The actor may have stopped in the meantime.
             let _ = tx.send(message).await;
         });
     }
 
-    // ---- Machine d'états ---------------------------------------------------------
+    // ---- State machine ---------------------------------------------------------
 
     fn dispatch(&mut self, event: Event) -> Result<(), ApiError> {
         let now = self.deps.clock.now();
@@ -578,15 +578,15 @@ impl Actor {
     }
 
     fn signal(&self, signal: Signal) {
-        // Plus de récepteur : le service D-Bus est arrêté.
+        // No more receiver: the D-Bus service is stopped.
         let _ = self.deps.signals.send(signal);
     }
 
-    // ---- Matériel ---------------------------------------------------------------
+    // ---- Hardware ---------------------------------------------------------------
 
     fn write_display(&mut self, display: DisplayId, level: u8) {
         if self.suspended {
-            // Aucune écriture pendant la veille ; le réveil ré-applique par priorité.
+            // No writes during sleep; the wake-up re-applies by priority.
             return;
         }
         let Some(runtime) = self.runtime.get_mut(&display) else {
@@ -613,12 +613,12 @@ impl Actor {
             "write requested"
         );
         if self.force_writes {
-            // Ré-application : l'écran a pu changer de lui-même, on réécrit même une valeur identique.
+            // Re-application: the display may have changed on its own, so even an identical value is rewritten.
             runtime.handle.force_target(raw);
             return;
         }
-        // Publier la cible même si elle égale la dernière valeur écrite : la tâche
-        // n'écrit rien mais annule une cible en attente.
+        // Publish the target even if it equals the last written value: the task
+        // writes nothing but cancels a pending target.
         runtime.handle.set_target(raw);
         if runtime.confirmed_raw == Some(raw) {
             self.queue.push_back(Event::WriteResult {
@@ -685,14 +685,14 @@ impl Actor {
         }
     }
 
-    /// Demande un scan au gestionnaire (débounce, plancher, un seul à la fois).
+    /// Requests a scan from the manager (debounce, floor, one at a time).
     fn request_scan(&mut self, trigger: RescanTrigger, delay_ms: u64) {
         let now = self.deps.clock.now().ms;
         self.rescan.trigger(now, trigger, delay_ms);
         self.poll_rescan();
     }
 
-    /// Lance les scans dus et programme la prochaine échéance du gestionnaire.
+    /// Launches the scans that are due and schedules the manager's next deadline.
     fn poll_rescan(&mut self) {
         let now = self.deps.clock.now().ms;
         for RescanAction::Start { generation } in self.rescan.poll(now) {
@@ -701,7 +701,7 @@ impl Actor {
             let tx = self.tx.clone();
             tokio::spawn(async move {
                 let found = hardware.discover(options).await;
-                // L'acteur peut s'être arrêté entre-temps.
+                // The actor may have stopped in the meantime.
                 let _ = tx.send(Msg::Discovered { generation, found }).await;
             });
         }
@@ -718,7 +718,7 @@ impl Actor {
         }
     }
 
-    /// Événement système : veille, réveil, verrouillage, hotplug.
+    /// System event: sleep, wake-up, lock, hotplug.
     fn on_system(&mut self, event: SystemEvent) {
         tracing::debug!(?event, "system event");
         match event {
@@ -729,7 +729,7 @@ impl Actor {
             SystemEvent::Resume | SystemEvent::Unlock | SystemEvent::SessionActive(true) => {
                 self.suspended = false;
                 self.rescan.set_suspended(false);
-                // Ré-application par priorité après rescan débouncé (le délai de 1,5 s vient de la machine d'états).
+                // Re-application by priority after a debounced rescan (the 1.5 s delay comes from the state machine).
                 if let Err(error) = self.dispatch(Event::Wake) {
                     tracing::debug!(%error, "wake-up had no effect");
                 }
@@ -766,8 +766,8 @@ impl Actor {
             );
         }
         let now = self.deps.clock.now();
-        // La machine d'états décide d'abord (rejet d'une liste factice) : le matériel
-        // en cours n'est touché que si la liste est acceptée.
+        // The state machine decides first (rejection of a bogus list): the current
+        // hardware is only touched if the list is accepted.
         match self.ctl.handle(now, Event::DisplaysListed(listed)) {
             Ok(commands) => {
                 let rejected = commands
@@ -777,7 +777,7 @@ impl Actor {
                 if accepted {
                     self.reconcile(found);
                 }
-                // Une liste acceptée (réveil, retour d'un écran) ré-applique : écritures forcées.
+                // An accepted list (wake-up, a display coming back) re-applies: forced writes.
                 self.force_writes = true;
                 self.execute(commands);
                 self.drain_queue();
@@ -787,7 +787,7 @@ impl Actor {
         }
         if !self.first_discovery_done {
             self.first_discovery_done = true;
-            // Planning : valeur de l'heure courante tout de suite, sans attendre la minute suivante.
+            // Schedule: value for the current hour right away, without waiting for the next minute.
             if let Err(error) = self.dispatch(Event::PlanningTick) {
                 tracing::debug!(%error, "initial schedule evaluation had no effect");
             }
@@ -804,7 +804,7 @@ impl Actor {
         self.poll_rescan();
     }
 
-    /// Aligne les tâches d'écran sur la liste acceptée.
+    /// Aligns the display tasks with the accepted list.
     fn reconcile(&mut self, found: Vec<Found>) {
         let was_controllable: BTreeSet<DisplayId> = self
             .ctl
@@ -828,7 +828,7 @@ impl Actor {
             );
             match f.backend {
                 Some(backend) => {
-                    // Une tâche existante dont le bus n'a pas changé est conservée (même identité EDID).
+                    // An existing task whose bus has not changed is kept (same EDID identity).
                     let keep = self.runtime.get(&id).is_some_and(|r| {
                         was_controllable.contains(&id) && r.bus == f.bus && r.max == f.info.max
                     });
@@ -883,12 +883,12 @@ impl Actor {
             if stats.last_error.is_some() {
                 self.retired.last_error = stats.last_error;
             }
-            // Arrêt en tâche de fond : l'acteur n'attend jamais le matériel.
+            // Shutdown in a background task: the actor never waits for the hardware.
             tokio::spawn(runtime.handle.shutdown());
         }
     }
 
-    // ---- Persistance -------------------------------------------------------------
+    // ---- Persistence -------------------------------------------------------------
 
     fn mark_dirty(&mut self, kind: Persist) {
         let (is_state, delay_ms) = match kind {
@@ -913,7 +913,7 @@ impl Actor {
         match kind {
             FlushKind::State if self.state_due.is_some_and(|d| now >= d) => self.write_state(),
             FlushKind::Config if self.config_due.is_some_and(|d| now >= d) => self.write_config(),
-            _ => {} // une écriture plus récente est déjà programmée
+            _ => {} // a more recent write is already scheduled
         }
     }
 
@@ -945,7 +945,7 @@ impl Actor {
         }
         match (self.config.to_toml(), &self.persister) {
             (Ok(text), Some(persister)) => {
-                // Réécrire le fichier perd les commentaires : on garde une copie de l'original, une fois.
+                // Rewriting the file loses the comments: keep a copy of the original, once.
                 let backup_first = !std::mem::replace(&mut self.config_backed_up, true);
                 persister.write(WriteJob {
                     path: self.deps.paths.config_file.clone(),
@@ -976,21 +976,21 @@ impl Actor {
         }
     }
 
-    // ---- Requêtes ----------------------------------------------------------------
+    // ---- Requests ----------------------------------------------------------------
 
-    /// URL, entité et jeton présents (le jeton a été retrouvé dans le trousseau).
+    /// URL, entity and token present (the token was found in the keyring).
     fn auto_configured(&self) -> bool {
         self.ha.token_present
             && !self.config.auto.url.is_empty()
             && !self.config.auto.entity.is_empty()
     }
 
-    /// Clé du trousseau de l'URL configurée.
+    /// Keyring key for the configured URL.
     fn token_key(&self) -> Option<String> {
         ha2lux_core::url::authority_key(&self.config.auto.url)
     }
 
-    /// Relit le jeton dans le trousseau (en tâche de fond) puis (re)démarre ou arrête la source.
+    /// Re-reads the token from the keyring (in a background task) then (re)starts or stops the source.
     fn refresh_token(&self) {
         let (Some(ha), Some(key)) = (self.deps.ha.clone(), self.token_key()) else {
             let _ = self.tx.try_send(Msg::Token {
@@ -1015,7 +1015,7 @@ impl Actor {
     }
 
     fn on_token(&mut self, key: &str, entity: &str, token: Option<String>) {
-        // Résultat périmé : la configuration a changé entre-temps.
+        // Stale result: the configuration changed in the meantime.
         if self.token_key().as_deref().unwrap_or("") != key || self.config.auto.entity != entity {
             return;
         }
@@ -1060,7 +1060,7 @@ impl Actor {
         }
     }
 
-    /// Requêtes qui touchent au jeton ou au réseau : traitées hors de l'acteur, réponse différée.
+    /// Requests that touch the token or the network: handled outside the actor, deferred reply.
     fn on_token_request(&self, request: Request, reply: oneshot::Sender<Result<Reply, ApiError>>) {
         let (Some(ha), Some(key)) = (self.deps.ha.clone(), self.token_key()) else {
             let _ = reply.send(Err(ApiError::NotConfigured(wire::encode(
@@ -1187,9 +1187,9 @@ impl Actor {
             }
             Request::List => return Ok(Reply::List(self.display_dtos())),
             Request::Status => return Ok(Reply::Status(Box::new(self.snapshot()))),
-            // Traitées par la boucle principale (accès asynchrone au trousseau et au réseau).
+            // Handled by the main loop (asynchronous access to the keyring and the network).
             Request::SetToken(_) | Request::ClearToken | Request::ListSensors => {}
-            Request::Quit => {} // traité par la boucle principale
+            Request::Quit => {} // handled by the main loop
         }
         Ok(Reply::Done)
     }
@@ -1214,7 +1214,7 @@ impl Actor {
             entry.range = range;
         } else {
             if self.config.displays.len() >= MAX_REMEMBERED_DISPLAYS {
-                // Plus de 32 écrans mémorisés : on oublie le plus ancien qui n'est pas branché.
+                // More than 32 displays remembered: forget the oldest one that is not plugged in.
                 let present: BTreeSet<&str> = self.runtime.keys().map(DisplayId::as_str).collect();
                 if let Some(pos) = self
                     .config
@@ -1266,7 +1266,7 @@ impl Actor {
         Ok(())
     }
 
-    /// Recharge la configuration. En cas d'erreur, l'ancienne est conservée (T-CFG-11).
+    /// Reloads the configuration. On error, the old one is kept (T-CFG-11).
     fn reload(&mut self) -> Result<(), ApiError> {
         let path = self.deps.paths.config_file.clone();
         let loaded = match store::read_config(&path) {
@@ -1282,7 +1282,7 @@ impl Actor {
         for issue in &loaded.issues {
             tracing::warn!(key = %issue.path, "configuration: {}", issue.message);
         }
-        // Les messages du démon suivent aussi la langue du fichier rechargé.
+        // The daemon's messages also follow the language of the reloaded file.
         ha2lux_i18n::set_preferred(&loaded.config.general.language);
         self.config = loaded.config;
         self.config_error = None;
@@ -1290,7 +1290,7 @@ impl Actor {
             self.ctl
                 .remember_range(DisplayId::new(entry.id.clone()), entry.range);
         }
-        // Le rechargement ne réécrit jamais le fichier : on lit, on n'écrit pas.
+        // Reloading never rewrites the file: we read, we do not write.
         self.config_due = None;
         self.dispatch(Event::Reload(Box::new(cfg)))?;
         self.config_due = None;
@@ -1298,7 +1298,7 @@ impl Actor {
         Ok(())
     }
 
-    // ---- État publié ---------------------------------------------------------------
+    // ---- Published state ---------------------------------------------------------------
 
     fn display_dtos(&self) -> Vec<DisplayDto> {
         self.ctl
@@ -1377,7 +1377,7 @@ impl Actor {
         snapshot
     }
 
-    /// Publie l'état et émet les signaux correspondant aux changements.
+    /// Publishes the state and emits the signals matching the changes.
     fn publish(&mut self) {
         let snapshot = Arc::new(self.snapshot());
         let previous = Arc::clone(&self.previous);
@@ -1405,7 +1405,7 @@ impl Actor {
     }
 }
 
-/// Prochaine sortie de la source ; en attente perpétuelle s'il n'y en a pas.
+/// Next output of the source; waits forever if there is none.
 async fn next_output(source: &mut Option<HaSource>) -> Option<Output> {
     match source {
         Some(source) => source.outputs.recv().await,

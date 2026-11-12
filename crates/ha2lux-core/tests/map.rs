@@ -1,4 +1,4 @@
-//! T-MAP : niveau maître ⇄ niveau écran (spec §4).
+//! T-MAP: master level ⇄ display level (spec §4).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{Range, reconstruct_master};
 use proptest::prelude::*;

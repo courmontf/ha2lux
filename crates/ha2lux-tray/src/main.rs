@@ -1,4 +1,4 @@
-//! Icône de zone de notification ha2lux.
+//! ha2lux notification area icon.
 #![forbid(unsafe_code)]
 
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ fn config_file() -> PathBuf {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    // Langue du fichier de configuration, avant d'afficher quoi que ce soit.
+    // Language from the configuration file, before displaying anything.
     ha2lux_i18n::config::init_from_config();
     match std::env::args().nth(1).as_deref() {
         None => {}

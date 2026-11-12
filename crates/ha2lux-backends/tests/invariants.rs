@@ -1,5 +1,5 @@
-//! Invariants de `ARCHITECTURE.md` §2.4, vérifiés en proptest sur des suites
-//! aléatoires d'événements, avec backend factice et horloge virtuelle.
+//! Invariants of `ARCHITECTURE.md` section 2.4, checked with proptest on
+//! random sequences of events, with a mock backend and a virtual clock.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -108,7 +108,7 @@ fn name(second: bool) -> &'static str {
     if second { "B" } else { "A" }
 }
 
-/// Niveau d'inactivité attendu (configuration par défaut : niveau 5, remappé).
+/// Expected idle level (default configuration: level 5, remapped).
 fn dim_level(range: ha2lux_core::Range) -> u8 {
     range.display_level(5)
 }
@@ -183,13 +183,13 @@ fn check_sequence(actions: &[Action]) -> Result<(), TestCaseError> {
         }
         let after = w.status();
 
-        // Une requête invalide est refusée sans aucun effet.
+        // An invalid request is refused with no effect.
         if result.is_err() {
             prop_assert_eq!(&before, &after);
             prop_assert_eq!(w.log.len(), log_len);
         }
 
-        // Invariant 2 : jamais de valeur hors bornes vers le matériel ; maître dans 0-100.
+        // Invariant 2: never an out-of-range value to the hardware; master within 0-100.
         for write in &w.log[log_len..] {
             prop_assert!(write.level <= 100);
             let max = if write.display == id("A") { 255 } else { 100 };
@@ -199,13 +199,13 @@ fn check_sequence(actions: &[Action]) -> Result<(), TestCaseError> {
             prop_assert!(m <= 100);
         }
 
-        // Invariant 1 : une seule source décide (mode cohérent avec ses conditions).
+        // Invariant 1: a single source decides (mode consistent with its conditions).
         if after.mode == BaseMode::AutoLux {
             prop_assert!(after.has_measure && after.ha_health == HaHealth::Ok);
         }
 
-        // Invariant 4 : toute rampe appartient à l'auto, jamais à l'atténuation ;
-        // un événement manuel annule rampe et atténuation.
+        // Invariant 4: every ramp belongs to auto, never to dimming;
+        // a manual event cancels ramp and dimming.
         if after.ramp_target.is_some() {
             prop_assert!(after.mode == BaseMode::AutoLux && !after.dimmed);
         }
@@ -213,15 +213,15 @@ fn check_sequence(actions: &[Action]) -> Result<(), TestCaseError> {
             prop_assert!(after.ramp_target.is_none() && !after.dimmed);
         }
 
-        // Invariant 3 : l'atténuation ne modifie pas le maître mémorisé.
+        // Invariant 3: dimming does not change the remembered master.
         if before.master.is_some()
             && (!before.dimmed && after.dimmed || before.dimmed && after.dimmed)
         {
             prop_assert_eq!(before.master, after.master);
         }
 
-        // Invariant 5 : « appliqué » implique que chaque écran contrôlable est bien
-        // au niveau voulu (un échec d'écriture n'est jamais mémorisé comme appliqué).
+        // Invariant 5: "applied" implies every controllable display is really
+        // at the intended level (a write failure is never remembered as applied).
         if let (Some(m), false) = (after.applied_master, hardware_dirty) {
             for (display, state, level, range) in &after.displays {
                 if *state == DisplayState::Controllable {
@@ -245,7 +245,7 @@ fn check_sequence(actions: &[Action]) -> Result<(), TestCaseError> {
             }
         }
 
-        // Invariant 6 : après un réveil, l'état final suit la priorité (confluent).
+        // Invariant 6: after a wake-up, the final state follows the priority (confluent).
         if wake_checked {
             let now = w.clock.now();
             for (display, state, _, range) in &after.displays {
@@ -265,9 +265,9 @@ fn check_sequence(actions: &[Action]) -> Result<(), TestCaseError> {
             }
         }
 
-        // Invariant 7 : le planning ne reprend jamais avant le prochain point (oracle
-        // indépendant : arcs calculés ici, pas par `Suspension`) et, avec une
-        // évaluation par minute, au plus tard à ce point.
+        // Invariant 7: the schedule never resumes before the next point (independent
+        // oracle: arcs computed here, not by `Suspension`) and, with a
+        // per-minute evaluation, at the latest at that point.
         for (at, suspension) in w.resumes.drain(..) {
             let arc = |from: u16, to: u16| (i32::from(to) - i32::from(from)).rem_euclid(1440);
             let (start, resume) = (suspension.start().minutes(), suspension.resume().minutes());

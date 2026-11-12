@@ -1,8 +1,8 @@
-//! Reconnexion à délai exponentiel plafonné, avec gigue (spec §8.2 : 1 s → 60 s).
+//! Reconnection with capped exponential delay and jitter (spec §8.2: 1 s → 60 s).
 
 use std::time::Duration;
 
-/// Délai de reconnexion.
+/// Reconnection delay.
 #[derive(Clone, Copy, Debug)]
 pub struct Backoff {
     min: Duration,
@@ -11,12 +11,12 @@ pub struct Backoff {
 }
 
 impl Backoff {
-    /// Délai de 1 s doublant jusqu'à 60 s.
+    /// Delay of 1 s, doubling up to 60 s.
     pub fn standard() -> Self {
         Self::new(Duration::from_secs(1), Duration::from_secs(60))
     }
 
-    /// Délai de `min` doublant jusqu'à `max`.
+    /// Delay of `min`, doubling up to `max`.
     pub fn new(min: Duration, max: Duration) -> Self {
         Self {
             min,
@@ -25,7 +25,7 @@ impl Backoff {
         }
     }
 
-    /// Prochain délai. `jitter` ∈ [0, 1[ : le délai de base est multiplié par 0,8 à 1,2.
+    /// Next delay. `jitter` ∈ [0, 1[: the base delay is multiplied by 0.8 to 1.2.
     pub fn next_delay(&mut self, jitter: f64) -> Duration {
         let base = self
             .min
@@ -36,23 +36,23 @@ impl Backoff {
         base.mul_f64(factor)
     }
 
-    /// Repart du délai minimal (connexion réussie).
+    /// Restarts from the minimum delay (connection succeeded).
     pub fn reset(&mut self) {
         self.attempt = 0;
     }
 }
 
-/// Petit générateur pseudo-aléatoire (xorshift) pour la gigue : pas de dépendance, pas de besoin cryptographique.
+/// Small pseudo-random generator (xorshift) for the jitter: no dependency, no cryptographic need.
 #[derive(Clone, Debug)]
 pub struct Jitter(u64);
 
 impl Jitter {
-    /// Graine arbitraire non nulle.
+    /// Arbitrary non-zero seed.
     pub fn new(seed: u64) -> Self {
         Self(seed | 1)
     }
 
-    /// Valeur dans [0, 1[.
+    /// Value in [0, 1[.
     pub fn sample(&mut self) -> f64 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;

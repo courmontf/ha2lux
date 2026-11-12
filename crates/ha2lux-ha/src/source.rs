@@ -1,10 +1,10 @@
-//! Source de mesures : WebSocket persistant (abonnement) avec **repli REST** tant qu'il
-//! est indisponible, reconnexion à délai exponentiel avec gigue, battement de cœur, et
-//! suivi de la santé du lien (péremption, hors ligne, dégradé).
+//! Measurement source: persistent WebSocket (subscription) with **REST fallback** while it
+//! is unavailable, reconnection with exponential delay and jitter, heartbeat, and
+//! link health tracking (staleness, offline, degraded).
 //!
-//! Le superviseur est écrit contre deux petits traits ([`Link`], [`Feed`]) : les tests
-//! l'exécutent en temps virtuel avec un faux lien, et le vrai lien ([`HaLink`]) est testé
-//! séparément contre de vrais sockets.
+//! The supervisor is written against two small traits ([`Link`], [`Feed`]): tests
+//! run it in virtual time with a fake link, and the real link ([`HaLink`]) is tested
+//! separately against real sockets.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -22,72 +22,72 @@ use crate::reading::{Reading, ReadingValue};
 use crate::rest::RestClient;
 use crate::ws::{WsClient, WsEvent};
 
-/// Événement d'un flux persistant.
+/// Event from a persistent stream.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FeedEvent {
-    /// Nouvelle lecture.
+    /// New reading.
     Reading(Reading),
-    /// Réponse au battement de cœur.
+    /// Heartbeat response.
     Pong,
 }
 
-/// Flux persistant (WebSocket).
+/// Persistent stream (WebSocket).
 pub trait Feed: Send {
-    /// Prochain événement. **Annulable sans perte.**
+    /// Next event. **Cancel-safe.**
     fn next(&mut self) -> impl Future<Output = Result<FeedEvent, HaError>> + Send;
-    /// Envoie un battement de cœur.
+    /// Sends a heartbeat.
     fn ping(&mut self) -> impl Future<Output = Result<(), HaError>> + Send;
 }
 
-/// Lien avec Home Assistant : lecture ponctuelle (REST) et ouverture d'un flux.
+/// Link to Home Assistant: one-off read (REST) and opening of a stream.
 pub trait Link: Send + Sync {
-    /// Type du flux persistant.
+    /// Type of the persistent stream.
     type Feed: Feed;
-    /// Lecture ponctuelle.
+    /// One-off read.
     fn read(&self) -> impl Future<Output = Result<Reading, HaError>> + Send;
-    /// Ouvre le flux persistant (connexion, authentification, souscription).
+    /// Opens the persistent stream (connection, authentication, subscription).
     fn connect(&self) -> impl Future<Output = Result<Self::Feed, HaError>> + Send;
 }
 
-/// Ce que la source publie.
+/// What the source publishes.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Output {
-    /// Mesure valide et fraîche (à donner au filtre).
+    /// Valid, fresh measurement (to hand to the filter).
     Measurement {
-        /// Éclairement en lux.
+        /// Illuminance in lux.
         lux: f64,
     },
-    /// La santé du lien a changé.
+    /// The link health changed.
     Health(HaHealth),
-    /// État brut tel qu'affiché par Home Assistant (panneau d'état).
+    /// Raw state as displayed by Home Assistant (status panel).
     Raw(String),
-    /// Le flux persistant est (dés)actif.
+    /// The persistent stream is (in)active.
     Websocket(bool),
-    /// Le jeton est refusé (`true`), ou ne l'est plus (`false`).
+    /// The token is rejected (`true`), or no longer is (`false`).
     AuthRejected(bool),
 }
 
-/// Réglages de la source.
+/// Source settings.
 #[derive(Clone, Debug)]
 pub struct SourceConfig {
-    /// Période du repli REST tant que le flux persistant est indisponible (15 s).
+    /// REST fallback period while the persistent stream is unavailable (15 s).
     pub poll_period: Duration,
-    /// Période de rafraîchissement REST tant que le flux est actif (60 s) : mesure la
-    /// fraîcheur d'un capteur dont la valeur ne change pas.
+    /// REST refresh period while the stream is active (60 s): measures the
+    /// freshness of a sensor whose value does not change.
     pub refresh_period: Duration,
-    /// Période du battement de cœur (30 s).
+    /// Heartbeat period (30 s).
     pub heartbeat: Duration,
-    /// Attente maximale de la réponse au battement de cœur (10 s).
+    /// Maximum wait for the heartbeat response (10 s).
     pub pong_timeout: Duration,
-    /// Délai du sondage de confirmation d'un saut de lumière (3 s).
+    /// Delay of the confirmation poll after a light jump (3 s).
     pub confirm_delay: Duration,
-    /// Silence après un refus d'authentification (5 min).
+    /// Quiet period after an authentication refusal (5 min).
     pub auth_pause: Duration,
-    /// Reconnexion exponentielle (1 s → 60 s).
+    /// Exponential reconnection (1 s → 60 s).
     pub backoff: Backoff,
-    /// Santé du lien.
+    /// Link health.
     pub health: HealthConfig,
-    /// Utiliser le flux persistant (sinon REST seul).
+    /// Use the persistent stream (otherwise REST only).
     pub websocket: bool,
 }
 
@@ -107,18 +107,18 @@ impl Default for SourceConfig {
     }
 }
 
-/// Source en cours d'exécution ; arrêtée quand elle est lâchée.
+/// Running source; stopped when dropped.
 pub struct HaSource {
-    /// Mesures et changements d'état.
+    /// Measurements and state changes.
     pub outputs: mpsc::UnboundedReceiver<Output>,
     poke: mpsc::UnboundedSender<()>,
     task: JoinHandle<()>,
 }
 
 impl HaSource {
-    /// Demande une lecture rapprochée (≈ 3 s) : confirmation d'un grand écart de lumière.
+    /// Requests a prompt read (≈ 3 s): confirmation of a large light jump.
     pub fn poll_soon(&self) {
-        // La tâche a pu s'arrêter : sans importance.
+        // The task may have stopped: irrelevant.
         let _ = self.poke.send(());
     }
 }
@@ -129,7 +129,7 @@ impl Drop for HaSource {
     }
 }
 
-/// Lance la source. `now_unix_ms` donne l'heure Unix (pour l'ancienneté d'une mesure).
+/// Starts the source. `now_unix_ms` gives the Unix time (for the age of a measurement).
 pub fn spawn<L>(
     link: L,
     config: SourceConfig,
@@ -221,7 +221,7 @@ impl<L: Link> Runner<L> {
 
     fn emit(&mut self, output: Output) {
         if self.out.send(output).is_err() {
-            self.closed = true; // plus personne n'écoute : on s'arrête
+            self.closed = true; // nobody is listening anymore: stop
         }
     }
 
@@ -275,7 +275,7 @@ impl<L: Link> Runner<L> {
             let delay = self.backoff.next_delay(self.jitter.sample());
             self.next_connect = Some(now + delay);
         }
-        // Repli REST tout de suite, puis toutes les 15 s.
+        // REST fallback right away, then every 15 s.
         self.next_read = Some(self.next_read.map_or(now, |t| t.min(now)));
     }
 
@@ -425,21 +425,21 @@ impl<L: Link> Runner<L> {
     }
 }
 
-/// Lien réel : REST + WebSocket.
+/// Real link: REST + WebSocket.
 pub struct HaLink {
     config: HaConfig,
     rest: RestClient,
 }
 
 impl HaLink {
-    /// Crée le lien.
+    /// Creates the link.
     pub fn new(config: HaConfig) -> Result<Self, HaError> {
         let rest = RestClient::new(&config)?;
         Ok(Self { config, rest })
     }
 }
 
-/// Flux WebSocket réel.
+/// Real WebSocket stream.
 pub struct WsFeed(WsClient);
 
 impl Feed for WsFeed {
@@ -472,7 +472,7 @@ impl Link for HaLink {
     }
 }
 
-/// Heure Unix courante en millisecondes.
+/// Current Unix time in milliseconds.
 pub fn system_unix_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

@@ -1,4 +1,4 @@
-//! Le backend factice respecte le contrat `DisplayBackend`.
+//! The mock backend honours the `DisplayBackend` contract.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;

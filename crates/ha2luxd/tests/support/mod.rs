@@ -1,4 +1,4 @@
-//! Banc de test du démon : matériel factice, horloge liée au temps de tokio.
+//! Daemon test rig: fake hardware, clock tied to tokio time.
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::Path;
@@ -36,7 +36,7 @@ fn deps(
         hardware: Arc::clone(hardware) as _,
         clock: Arc::new(TokioClock::new(MinuteOfDay::parse("14:00").unwrap())),
         signals,
-        // Pas de cadence minimale : les valeurs arrivent tout de suite sur l'écran factice.
+        // No minimum cadence: values reach the fake display immediately.
         task_config: Some(TaskConfig {
             min_interval: Duration::ZERO,
             ..TaskConfig::ddc()
@@ -52,7 +52,7 @@ pub fn write_file(path: &Path, text: &str) {
 }
 
 impl Rig {
-    /// Démarre un démon avec un écran factice « A » (max 100, niveau 50).
+    /// Starts a daemon with a fake display "A" (max 100, level 50).
     pub async fn with_screen(config: Option<&str>, state: Option<&str>) -> Rig {
         let hardware = MockHardware::new();
         hardware.add("A", DisplayKind::External, 100, 50);
@@ -97,7 +97,7 @@ impl Rig {
         Ok(rig)
     }
 
-    /// Arrêt propre puis redémarrage sur les mêmes fichiers et le même matériel.
+    /// Clean shutdown then restart on the same files and the same hardware.
     pub async fn restart(&mut self) {
         self.daemon.take().unwrap().shutdown().await;
         let (tx, signals) = tokio::sync::mpsc::unbounded_channel();
@@ -110,15 +110,15 @@ impl Rig {
         self.settle().await;
     }
 
-    /// Laisse tourner tous les acteurs et tâches prêts, sans faire avancer le temps.
+    /// Lets all ready actors and tasks run, without advancing time.
     pub async fn settle(&self) {
         for _ in 0..200 {
             tokio::task::yield_now().await;
         }
     }
 
-    /// Fait avancer le temps virtuel **pas à pas** (les minuteries enchaînées, comme le
-    /// backoff de 50 puis 100 ms, se déclenchent dans l'ordre, comme en production).
+    /// Advances virtual time **step by step** (chained timers, like the
+    /// 50 then 100 ms backoff, fire in order, as in production).
     pub async fn advance(&self, duration: Duration) {
         tokio::time::sleep(duration).await;
         self.settle().await;
@@ -144,7 +144,7 @@ impl Rig {
     }
 }
 
-/// Attend (sans faire avancer le temps) qu'un fichier existe et satisfasse `ready`.
+/// Waits (without advancing time) for a file to exist and satisfy `ready`.
 pub async fn wait_file(path: &Path, ready: impl Fn(&str) -> bool) -> String {
     for _ in 0..2_000_000 {
         if let Ok(text) = std::fs::read_to_string(path)

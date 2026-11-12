@@ -1,4 +1,4 @@
-//! Contrat D-Bus partagé : signatures et noms ne doivent pas dériver sans que ce test le dise.
+//! Shared D-Bus contract: signatures and names must not drift without this test saying so.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use ha2lux_ipc::{BUS_NAME, DisplayDto, ERROR_PREFIX, ErrorKind, INTERFACE, OBJECT_PATH, classify};
@@ -6,7 +6,7 @@ use zbus::zvariant::Type;
 
 #[test]
 fn display_dto_signature_is_stable() {
-    // id, name, kind, state : s ; level : i (−1 si inconnu) ; low, high, max_raw : u
+    // id, name, kind, state: s; level: i (−1 if unknown); low, high, max_raw: u
     assert_eq!(DisplayDto::SIGNATURE.to_string(), "(ssssiuuu)");
 }
 

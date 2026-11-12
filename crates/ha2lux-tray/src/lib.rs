@@ -1,10 +1,10 @@
-//! Icône de zone de notification de ha2lux (StatusNotifierItem via `ksni`).
+//! ha2lux notification area icon (StatusNotifierItem via `ksni`).
 //!
-//! - [`model`] : état affiché et description **pure** du menu (testable sans bus) ;
-//! - [`wheel`] : accumulation des crans de molette (appliqués d'un seul coup) ;
-//! - [`icon`] : image de l'icône, dessinée par le programme ;
-//! - [`osd`] : affichage du niveau par une notification remplaçable ;
-//! - [`app`] : boucle d'exécution (client D-Bus du démon, icône, OSD).
+//! - [`model`]: displayed state and **pure** menu description (testable without a bus);
+//! - [`wheel`]: accumulation of wheel notches (applied in one go);
+//! - [`icon`]: icon image, drawn by the program;
+//! - [`osd`]: level display through a replaceable notification;
+//! - [`app`]: run loop (daemon D-Bus client, icon, OSD).
 #![forbid(unsafe_code)]
 
 pub mod app;

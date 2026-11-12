@@ -1,4 +1,4 @@
-//! Association écran ↔ bus par EDID (NVIDIA propriétaire) : garde-fous de sécurité.
+//! Display to bus association by EDID (proprietary NVIDIA): safety guard rails.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod support;
@@ -27,7 +27,7 @@ fn edid(serial: u32, name: &str) -> Vec<u8> {
     Edid::build_block("AUS", 0x24AC, serial, Some(name), None)
 }
 
-/// Poste NVIDIA : écrans sans lien `ddc`, adaptateurs GPU, et des bus qui ne sont PAS des bus d'écran.
+/// NVIDIA machine: displays without a `ddc` link, GPU adapters, and buses that are NOT display buses.
 fn nvidia_system() -> (TempDir, std::sync::Arc<FakeOpener>, Vec<u8>, Vec<u8>) {
     let root = TempDir::new().unwrap();
     let (a, b) = (edid(111, "Left"), edid(222, "Right"));
@@ -40,9 +40,9 @@ fn nvidia_system() -> (TempDir, std::sync::Arc<FakeOpener>, Vec<u8>, Vec<u8>) {
     adapter(root.path(), 4, "SMBus I801 adapter at f000");
     adapter(root.path(), 5, "Synopsys DesignWare I2C adapter");
     let opener = std::sync::Arc::new(FakeOpener::default());
-    opener.add_edid(1, b.clone()); // HDMI-A-1 est sur le bus 1
-    opener.add_edid(2, a.clone()); // DP-1 est sur le bus 2
-    opener.add_edid(4, b.clone()); // piège : un bus SMBus qui répondrait… s'il était ouvert
+    opener.add_edid(1, b.clone()); // HDMI-A-1 is on bus 1
+    opener.add_edid(2, a.clone()); // DP-1 is on bus 2
+    opener.add_edid(4, b.clone()); // trap: an SMBus bus that would answer... if it were opened
     opener.add_edid(5, a.clone());
     (root, opener, a, b)
 }

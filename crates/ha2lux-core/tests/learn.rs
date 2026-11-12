@@ -1,4 +1,4 @@
-//! T-LRN : apprentissage et garde-fous (spec §8.6).
+//! T-LRN: learning and safeguards (spec §8.6).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{Curve, LearnOutcome, LearnPolicy};
 use proptest::prelude::*;
@@ -58,9 +58,9 @@ fn t_lrn_05() {
 
 #[test]
 fn t_lrn_06_eviction() {
-    // La courbe de la spec (0:10, 2:25, …) est incohérente avec la règle « même
-    // lumière » (écart log 0,079 < 0,15) : elle serait fusionnée au chargement.
-    // On utilise ici une courbe de 8 points valide, même scénario d'éviction.
+    // The spec's curve (0:10, 2:25, …) is inconsistent with the "same
+    // light" rule (log gap 0.079 < 0.15): it would be merged on load.
+    // Here we use a valid 8-point curve, same eviction scenario.
     let mut c = Curve::parse("0:10,6:25,15:40,30:50,100:70,300:85,600:92,1000:100");
     assert_eq!(c.points().len(), 8);
     c.learn(50.0, 60, None, &RAW);
@@ -125,7 +125,7 @@ fn t_lrn_g1_refuses_flattening() {
 #[test]
 fn t_lrn_g2_ignores_small_delta() {
     let mut c = Curve::new();
-    // Valeur prédite à 10 lx : 40.
+    // Value predicted at 10 lx: 40.
     assert_eq!(
         c.learn(10.0, 41, None, &LearnPolicy::default()),
         LearnOutcome::IgnoredTooClose
@@ -135,7 +135,7 @@ fn t_lrn_g2_ignores_small_delta() {
         LearnOutcome::IgnoredTooClose
     );
     assert!(c.points().is_empty());
-    // Un écart de 2 est appris (T-LRN-01 : 32 prédit, 30 voulu).
+    // A gap of 2 is learned (T-LRN-01: 32 predicted, 30 wanted).
     assert_eq!(
         c.learn(5.0, 30, None, &LearnPolicy::default()),
         LearnOutcome::Learned

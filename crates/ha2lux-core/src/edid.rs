@@ -1,44 +1,44 @@
-//! Analyse d'un bloc EDID de base (128 octets) et identité stable d'un écran.
+//! Parsing of a base EDID block (128 bytes) and stable identity of a display.
 
 use thiserror::Error;
 
-/// Taille d'un bloc EDID de base.
+/// Size of a base EDID block.
 pub const EDID_BLOCK_LEN: usize = 128;
 const HEADER: [u8; 8] = [0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00];
 
-/// Erreurs d'analyse EDID.
+/// EDID parsing errors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum EdidError {
-    /// Moins de 128 octets.
+    /// Fewer than 128 bytes.
     #[error("EDID too short ({0} bytes)")]
     TooShort(usize),
-    /// En-tête fixe absent.
+    /// Fixed header missing.
     #[error("EDID without a valid header")]
     BadHeader,
 }
 
-/// Informations extraites d'un EDID.
+/// Information extracted from an EDID.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Edid {
-    /// Code fabricant PNP sur trois lettres (ex. `DEL`).
+    /// Three-letter PNP manufacturer code (e.g. `DEL`).
     pub manufacturer: String,
-    /// Code produit.
+    /// Product code.
     pub product: u16,
-    /// Numéro de série numérique (0 si absent).
+    /// Numeric serial number (0 if absent).
     pub serial: u32,
-    /// Descripteur « nom du moniteur » (0xFC).
+    /// "Monitor name" descriptor (0xFC).
     pub name: Option<String>,
-    /// Descripteur « numéro de série » texte (0xFF).
+    /// Text "serial number" descriptor (0xFF).
     pub serial_text: Option<String>,
-    /// Semaine de fabrication.
+    /// Week of manufacture.
     pub week: u8,
-    /// Année de fabrication.
+    /// Year of manufacture.
     pub year: u16,
-    /// Nombre de blocs d'extension.
+    /// Number of extension blocks.
     pub extensions: u8,
-    /// La somme de contrôle du bloc est correcte (beaucoup d'écrans réels l'ont fausse).
+    /// The block checksum is correct (many real displays get it wrong).
     pub checksum_ok: bool,
-    /// Empreinte FNV-1a 64 bits des 128 premiers octets (identité de repli, non cryptographique).
+    /// 64-bit FNV-1a fingerprint of the first 128 bytes (fallback identity, non-cryptographic).
     pub fingerprint: u64,
 }
 
@@ -65,7 +65,7 @@ fn descriptor_text(block: &[u8]) -> Option<String> {
 }
 
 impl Edid {
-    /// Analyse les 128 premiers octets d'un EDID.
+    /// Parses the first 128 bytes of an EDID.
     pub fn parse(data: &[u8]) -> Result<Self, EdidError> {
         if data.len() < EDID_BLOCK_LEN {
             return Err(EdidError::TooShort(data.len()));
@@ -111,18 +111,18 @@ impl Edid {
         })
     }
 
-    /// Le numéro de série numérique est exploitable : ni 0, ni les valeurs de
-    /// remplissage courantes (`0x01010101`, `0xFFFFFFFF`) que portent de nombreux
-    /// écrans de série et qui ne distinguent donc pas deux exemplaires.
+    /// The numeric serial number is usable: neither 0 nor the common
+    /// filler values (`0x01010101`, `0xFFFFFFFF`) carried by many
+    /// mass-produced displays, which therefore do not distinguish two units.
     pub fn has_real_serial(&self) -> bool {
         !matches!(self.serial, 0 | 0x0101_0101 | 0xFFFF_FFFF)
     }
 
-    /// Identité stable : fabricant + produit + série numérique ; à défaut série
-    /// texte ; à défaut connecteur + empreinte de l'EDID.
+    /// Stable identity: manufacturer + product + numeric serial; failing that,
+    /// text serial; failing that, connector + EDID fingerprint.
     ///
-    /// Deux écrans identiques de séries différentes restent distincts ; un
-    /// changement de connecteur ne change pas l'identité quand une série existe.
+    /// Two identical displays with different serials remain distinct; a
+    /// connector change does not change the identity when a serial exists.
     pub fn identity(&self, connector: &str) -> String {
         if self.has_real_serial() {
             format!(
@@ -136,12 +136,12 @@ impl Edid {
         }
     }
 
-    /// Nom affiché : descripteur de nom, sinon le nom du connecteur.
+    /// Display name: name descriptor, otherwise the connector name.
     pub fn display_name(&self, connector: &str) -> String {
         self.name.clone().unwrap_or_else(|| connector.to_owned())
     }
 
-    /// Construit un EDID synthétique valide (écrans factices et tests).
+    /// Builds a valid synthetic EDID (fake displays and tests).
     pub fn build_block(
         manufacturer: &str,
         product: u16,

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Avant chaque commit : formatage, clippy, fuites, gros fichiers. Rapide (quelques secondes).
-# Contournement exceptionnel : git commit --no-verify  (la CI en ligne revérifie tout).
+# Before each commit: formatting, clippy, leaks, large files. Fast (a few seconds).
+# Exceptional bypass: git commit --no-verify  (the online CI re-checks everything).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 export PATH="$HOME/.cargo/bin:$PATH"

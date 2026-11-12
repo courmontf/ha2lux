@@ -1,20 +1,20 @@
-//! Tâche d'écran : une tâche asynchrone par écran, qui possède son backend.
+//! Display task: one async task per display, which owns its backend.
 //!
 //! Garanties :
-//! - **aucun appelant n'attend le matériel** : [`DisplayHandle::set_target`]
-//!   publie une valeur et rend la main immédiatement ;
-//! - **coalescence** : seule la dernière cible compte (`watch`), et la valeur
-//!   finale est toujours écrite ;
-//! - **cadence** : intervalle minimal entre deux écritures du même écran ;
-//! - **timeout** sur chaque opération ; une opération abandonnée est comptée
-//!   (`abandoned_ops`) et, répétée, rend la panne définitive ;
-//! - **retries** avec backoff, puis **cooldown** après des échecs répétés, au
-//!   dégel une seule tentative part, avec la dernière cible ;
-//! - **jamais de panique** ni de blocage des autres écrans : chaque écran a
-//!   sa tâche.
+//! - **no caller waits for the hardware**: [`DisplayHandle::set_target`]
+//!   publishes a value and returns immediately;
+//! - **coalescing**: only the latest target counts (`watch`), and the final
+//!   value is always written;
+//! - **pacing**: minimum interval between two writes to the same display;
+//! - **timeout** on each operation; an abandoned operation is counted
+//!   (`abandoned_ops`) and, when repeated, makes the failure permanent;
+//! - **retries** with backoff, then **cooldown** after repeated failures; at
+//!   thaw a single attempt goes out, with the latest target;
+//! - **never a panic** nor blocking of the other displays: each display has
+//!   its own task.
 //!
-//! Le verrou par bus I²C (plusieurs écrans partageant un bus) viendra avec le
-//! backend DDC (étape 5) : il s'insère autour des appels au backend.
+//! The per-I²C-bus lock (several displays sharing a bus) will come with the
+//! DDC backend (step 5): it fits around the backend calls.
 
 use std::time::Duration;
 
@@ -23,27 +23,27 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, sleep, sleep_until, timeout};
 
-/// Réglages de la tâche d'écran.
+/// Display task settings.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TaskConfig {
-    /// Intervalle minimal entre deux écritures (0 = pas de limite).
+    /// Minimum interval between two writes (0 = no limit).
     pub min_interval: Duration,
-    /// Délai maximal d'une opération matérielle.
+    /// Maximum delay of a hardware operation.
     pub op_timeout: Duration,
-    /// Tentatives par écriture (≥ 1).
+    /// Attempts per write (>= 1).
     pub attempts: u32,
-    /// Attente avant la tentative suivante (la dernière valeur sert ensuite).
+    /// Wait before the next attempt (the last value is then reused).
     pub backoff: Vec<Duration>,
-    /// Échecs consécutifs déclenchant le cooldown.
+    /// Consecutive failures that trigger the cooldown.
     pub cooldown_after: u32,
-    /// Durée du gel des écritures.
+    /// Duration of the write freeze.
     pub cooldown: Duration,
-    /// Timeouts consécutifs rendant la panne définitive (fd « suspect »).
+    /// Consecutive timeouts that make the failure permanent ("suspect" fd).
     pub max_abandoned: u32,
 }
 
 impl TaskConfig {
-    /// Réglages DDC/CI : cadence ≈ 50 ms (à confirmer sur le matériel).
+    /// DDC/CI settings: pacing of about 50 ms (to be confirmed on real hardware).
     pub fn ddc() -> Self {
         Self {
             min_interval: Duration::from_millis(50),
@@ -60,7 +60,7 @@ impl TaskConfig {
         }
     }
 
-    /// Réglages backlight : pas de cadence minimale, coalescence identique.
+    /// Backlight settings: no minimum pacing, same coalescing.
     pub fn backlight() -> Self {
         Self {
             min_interval: Duration::ZERO,
@@ -75,54 +75,54 @@ impl Default for TaskConfig {
     }
 }
 
-/// Événements émis par une tâche d'écran vers le décideur.
+/// Events emitted by a display task towards the decision maker.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DisplayEvent {
-    /// La valeur brute a été écrite avec succès.
+    /// The raw value was written successfully.
     Applied {
-        /// Écran concerné.
+        /// Display concerned.
         display: DisplayId,
-        /// Valeur brute écrite.
+        /// Raw value written.
         raw: u32,
     },
-    /// Une écriture a définitivement échoué (retries épuisés ou erreur fatale).
+    /// A write failed permanently (retries exhausted or fatal error).
     WriteFailed {
-        /// Écran concerné.
+        /// Display concerned.
         display: DisplayId,
-        /// Dernière erreur.
+        /// Last error.
         error: BackendError,
-        /// Inutile de réessayer : droits, débranchement, ou délais répétés.
+        /// No point retrying: permissions, unplugging, or repeated timeouts.
         fatal: bool,
     },
-    /// Écritures gelées pendant `duration` (une seule partira au dégel).
+    /// Writes frozen for `duration` (a single one will go out at thaw).
     CoolingDown {
-        /// Écran concerné.
+        /// Display concerned.
         display: DisplayId,
-        /// Durée du gel.
+        /// Freeze duration.
         duration: Duration,
     },
 }
 
-/// Compteurs observables d'un écran (exposés par `Status()`).
+/// Observable counters of a display (exposed by `Status()`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DisplayStats {
-    /// Écritures réussies.
+    /// Successful writes.
     pub writes_ok: u64,
-    /// Écritures définitivement échouées.
+    /// Permanently failed writes.
     pub writes_failed: u64,
-    /// Nouvelles tentatives effectuées.
+    /// Retries performed.
     pub retries: u64,
-    /// Opérations abandonnées après timeout.
+    /// Operations abandoned after timeout.
     pub abandoned_ops: u32,
-    /// Dernière erreur rencontrée.
+    /// Last error encountered.
     pub last_error: Option<String>,
-    /// Dernière valeur brute écrite avec succès.
+    /// Last raw value written successfully.
     pub last_raw: Option<u32>,
 }
 
-/// Cible publiée vers la tâche : une valeur brute et une « époque ». Une écriture
-/// **forcée** incrémente l'époque : la tâche réécrit alors même si la valeur est
-/// identique à la dernière écrite (écran qui s'est remis à 100 % au réveil).
+/// Target published to the task: a raw value and an "epoch". A **forced**
+/// write increments the epoch: the task then rewrites even if the value is
+/// identical to the last one written (display that reset to 100% on wake-up).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Target {
     raw: u32,
@@ -134,8 +134,8 @@ enum Command {
     Probe(oneshot::Sender<Result<DisplayInfo, BackendError>>),
 }
 
-/// Poignée vers la tâche d'un écran. Lâcher la poignée arrête la tâche après
-/// l'écriture finale éventuellement en attente.
+/// Handle to a display's task. Dropping the handle stops the task after
+/// the final pending write, if any.
 pub struct DisplayHandle {
     info: DisplayInfo,
     target: watch::Sender<Option<Target>>,
@@ -146,14 +146,14 @@ pub struct DisplayHandle {
 }
 
 impl DisplayHandle {
-    /// Écran piloté.
+    /// Display driven.
     pub fn info(&self) -> &DisplayInfo {
         &self.info
     }
 
-    /// Publie la valeur brute voulue (bornée au maximum de l'écran).
-    /// Ne bloque jamais ; remplace toute cible non encore écrite. Si la valeur
-    /// égale la dernière écrite, rien n'est réécrit.
+    /// Publishes the desired raw value (clamped to the display's maximum).
+    /// Never blocks; replaces any target not yet written. If the value
+    /// equals the last one written, nothing is rewritten.
     pub fn set_target(&self, raw: u32) {
         let epoch = self.epoch.load(std::sync::atomic::Ordering::Acquire);
         self.target.send_replace(Some(Target {
@@ -162,9 +162,9 @@ impl DisplayHandle {
         }));
     }
 
-    /// Comme [`DisplayHandle::set_target`], mais **réécrit** même si la valeur
-    /// égale la dernière écrite : à utiliser quand l'écran a pu changer de lui-même
-    /// (réveil de veille, retour du lien).
+    /// Like [`DisplayHandle::set_target`], but **rewrites** even if the value
+    /// equals the last one written: use when the display may have changed by itself
+    /// (wake from sleep, link coming back).
     pub fn force_target(&self, raw: u32) {
         let epoch = self.epoch.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
         self.target.send_replace(Some(Target {
@@ -178,21 +178,21 @@ impl DisplayHandle {
         self.stats.borrow().clone()
     }
 
-    /// Lecture matérielle exclusive, sérialisée avec les écritures.
+    /// Exclusive hardware read, serialized with writes.
     pub async fn read(&self) -> Result<u32, BackendError> {
         let (reply, answer) = oneshot::channel();
         self.send(Command::Read(reply)).await?;
         answer.await.map_err(|_| gone())?
     }
 
-    /// Sonde exclusive de l'écran.
+    /// Exclusive probe of the display.
     pub async fn probe(&self) -> Result<DisplayInfo, BackendError> {
         let (reply, answer) = oneshot::channel();
         self.send(Command::Probe(reply)).await?;
         answer.await.map_err(|_| gone())?
     }
 
-    /// Arrête la tâche proprement (l'écriture finale en attente est émise).
+    /// Stops the task cleanly (the pending final write is emitted).
     pub async fn shutdown(self) {
         let Self {
             target,
@@ -202,7 +202,7 @@ impl DisplayHandle {
         } = self;
         drop(target);
         drop(commands);
-        // Une tâche déjà arrêtée ou paniquée n'a rien à nous apprendre ici.
+        // A task already stopped or panicked has nothing to tell us here.
         let _ = join.await;
     }
 
@@ -215,7 +215,7 @@ fn gone() -> BackendError {
     BackendError::Disconnected("display task stopped".to_owned())
 }
 
-/// Lance la tâche d'un écran. Doit être appelée dans un runtime tokio.
+/// Starts a display's task. Must be called within a tokio runtime.
 pub fn spawn_display_task<B: DisplayBackend>(
     backend: B,
     config: TaskConfig,
@@ -268,8 +268,8 @@ struct Runner<B> {
 
 impl<B: DisplayBackend> Runner<B> {
     async fn run(mut self) {
-        // Vrai quand la poignée a été lâchée : on tente l'écriture finale due
-        // (une fois), puis on s'arrête.
+        // True when the handle has been dropped: we try the final write due
+        // (once), then stop.
         let mut closing = false;
         loop {
             let wanted = *self.target.borrow_and_update();
@@ -279,8 +279,8 @@ impl<B: DisplayBackend> Runner<B> {
                 .filter(|at| *at > Instant::now());
             match (pending, wait_until) {
                 (Some(_), wait) if closing => {
-                    // Arrêt : une seule écriture finale, après la cadence, mais
-                    // jamais en attendant la fin d'un gel (écran déjà en panne).
+                    // Stop: a single final write, after the pacing, but
+                    // never while waiting out a freeze (display already failing).
                     let frozen = self.frozen_until.is_some_and(|t| t > Instant::now());
                     if !frozen {
                         if let Some(at) = wait {
@@ -315,13 +315,13 @@ impl<B: DisplayBackend> Runner<B> {
         }
     }
 
-    /// Une écriture est due si la valeur diffère de la dernière écrite, ou si une
-    /// écriture forcée plus récente que la dernière appliquée a été demandée.
+    /// A write is due if the value differs from the last one written, or if a
+    /// forced write more recent than the last one applied was requested.
     fn needs_write(&self, target: Target) -> bool {
         Some(target.raw) != self.last_ok || target.epoch > self.applied_epoch
     }
 
-    /// Instant avant lequel on n'écrit pas (cadence ou gel).
+    /// Instant before which we do not write (pacing or freeze).
     fn ready_at(&self) -> Option<Instant> {
         let paced = self.last_write_at.map(|t| t + self.config.min_interval);
         match (paced, self.frozen_until) {
@@ -336,7 +336,7 @@ impl<B: DisplayBackend> Runner<B> {
                 let limit = self.config.op_timeout;
                 let outcome = timeout(limit, self.backend.read()).await;
                 let result = self.settle(outcome);
-                // L'appelant a pu abandonner : rien à faire.
+                // The caller may have given up: nothing to do.
                 let _ = reply.send(result);
             }
             Command::Probe(reply) => {
@@ -348,7 +348,7 @@ impl<B: DisplayBackend> Runner<B> {
         }
     }
 
-    /// Traite le résultat d'une opération sous timeout et tient les compteurs.
+    /// Handles the result of an operation under timeout and maintains the counters.
     fn settle<T>(
         &mut self,
         outcome: Result<Result<T, BackendError>, tokio::time::error::Elapsed>,
@@ -366,15 +366,15 @@ impl<B: DisplayBackend> Runner<B> {
         }
     }
 
-    /// Une écriture de la dernière cible, avec retries et backoff.
+    /// One write of the latest target, with retries and backoff.
     async fn write_op(&mut self) {
         let attempts = if self.failures >= self.config.cooldown_after {
-            1 // dégel : une seule tentative d'essai
+            1 // thaw: a single trial attempt
         } else {
             self.config.attempts.max(1)
         };
         for attempt in 0..attempts {
-            // Chaque tentative reprend la valeur la plus récente.
+            // Each attempt takes the most recent value.
             let Some(target) = *self.target.borrow_and_update() else {
                 return;
             };
@@ -443,7 +443,7 @@ impl<B: DisplayBackend> Runner<B> {
         });
         if self.failures >= self.config.cooldown_after {
             if self.frozen_until.is_none_or(|t| t <= Instant::now()) {
-                // Un seul avertissement par entrée en cooldown ; la suite reste en debug.
+                // A single warning per cooldown entry; the rest stays at debug level.
                 tracing::warn!(display = %self.id, "writes frozen after repeated failures");
             }
             self.frozen_until = Some(Instant::now() + self.config.cooldown);
@@ -455,7 +455,7 @@ impl<B: DisplayBackend> Runner<B> {
     }
 
     fn emit(&self, event: DisplayEvent) {
-        // Le décideur peut avoir disparu pendant l'arrêt : sans importance.
+        // The decision maker may have disappeared during shutdown: unimportant.
         let _ = self.events.send(event);
     }
 }

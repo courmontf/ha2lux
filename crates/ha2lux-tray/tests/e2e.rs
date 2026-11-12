@@ -1,5 +1,5 @@
-//! De bout en bout : le vrai binaire `ha2lux-tray` contre le vrai démon (écrans factices),
-//! avec un faux `StatusNotifierWatcher`, sur un **bus privé**.
+//! End to end: the real `ha2lux-tray` binary against the real daemon (fake displays),
+//! with a fake `StatusNotifierWatcher`, on a **private bus**.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, missing_docs)]
 
 use std::collections::HashMap;
@@ -115,7 +115,7 @@ where
     panic!("délai dépassé : {what}");
 }
 
-/// Éléments du menu `dbusmenu` : (identifiant, libellé, activé).
+/// `dbusmenu` menu items: (id, label, enabled).
 fn layout_items(node: &Value<'_>, out: &mut Vec<(i32, String, bool)>) {
     let Value::Structure(structure) = node else {
         return;
@@ -197,7 +197,7 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
         eprintln!("SKIPPED : dbus-daemon introuvable, test D-Bus non exécuté");
         return;
     };
-    // Faux hôte d'icônes.
+    // Fake icon host.
     let registered = Arc::new(Mutex::new(Vec::new()));
     let watcher_connection = bus.connect().await;
     watcher_connection
@@ -215,7 +215,7 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
         .await
         .unwrap();
 
-    // Vrai démon, écrans factices.
+    // Real daemon, fake displays.
     let dir = TempDir::new().unwrap();
     let paths = Paths::in_dir(dir.path());
     std::fs::write(
@@ -256,7 +256,7 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
     .await;
     let daemon = DaemonProxy::new(&client).await.unwrap();
 
-    // Vrai binaire d'icône.
+    // Real tray icon binary.
     let mut tray = Command::new(env!("CARGO_BIN_EXE_ha2lux-tray"))
         .env("DBUS_SESSION_BUS_ADDRESS", &bus.address)
         .stdout(Stdio::null())
@@ -271,10 +271,10 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
             .cloned()
     })
     .await;
-    // ksni annonce `nom-de-bus` ou `nom-de-bus/chemin` selon la version.
+    // ksni announces `bus-name` or `bus-name/path` depending on the version.
     let destination = service_name.split('/').next().unwrap().to_owned();
 
-    // Le menu reflète le démon : presets avec valeurs, écran, bascules.
+    // The menu reflects the daemon: presets with values, display, toggles.
     let items = eventually("menu rempli", || async {
         let items = menu(&client, &destination).await;
         items
@@ -301,7 +301,7 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
             .any(|l| l.starts_with("Auto-luminosité (non configurée)"))
     );
 
-    // Clic sur un preset : le démon applique le niveau.
+    // Click on a preset: the daemon applies the level.
     let night = items.iter().find(|(_, l, _)| l == "Nuit — 20 %").unwrap().0;
     click(&client, &destination, night).await;
     eventually("preset appliqué", || async {
@@ -309,7 +309,7 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
     })
     .await;
 
-    // Molette : trois crans vers le haut = un seul pas de 3 × 5 %.
+    // Wheel: three notches up = a single step of 3 × 5 %.
     for _ in 0..3 {
         client
             .call_method(
@@ -327,7 +327,7 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
     })
     .await;
 
-    // Le menu suit le changement fait côté démon (CLI, raccourci…).
+    // The menu follows the change made on the daemon side (CLI, shortcut...).
     daemon.set_master(70).await.unwrap();
     eventually("menu rafraîchi", || async {
         let items = menu(&client, &destination).await;
@@ -338,9 +338,9 @@ async fn tray_registers_shows_the_menu_and_drives_the_daemon() {
     })
     .await;
 
-    // « Quitter » arrête l'icône (pas le démon).
+    // "Quitter" stops the tray icon (not the daemon).
     let quit = items.iter().find(|(_, l, _)| l == "Quitter").unwrap().0;
-    // L'icône peut se fermer avant de répondre à l'appel : l'erreur est attendue.
+    // The icon may close before answering the call: the error is expected.
     let _ = client
         .call_method(
             Some(destination.as_str()),

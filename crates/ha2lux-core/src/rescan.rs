@@ -1,37 +1,37 @@
-//! Gestionnaire de rescan (sans E/S) : quand lancer une énumération des écrans.
+//! Rescan manager (no I/O): when to start a display enumeration.
 //!
-//! Mécanismes de robustesse :
-//! - **débounce** de 600 ms (une rafale d'événements = un seul scan) ;
-//! - **plancher de 30 s** entre deux scans déclenchés par un hotplug *bruyant*
-//!   (un écran dont le lien se ré-entraîne en boucle) ; veille, déverrouillage et
-//!   demande manuelle ne sont jamais bridés ;
-//! - **un seul scan à la fois**, avec un numéro de **génération** : le résultat
-//!   tardif d'un scan désavoué est jeté ;
-//! - **chien de garde** de 10 s : un scan bloqué est désavoué ; après 3 désaveux
-//!   consécutifs on attend un nouvel événement ;
-//! - écrans **en attente** : relances à 2, 5, 10, 20 s puis toutes les 60 s sans
-//!   fin, reportées tant que l'interface interactive est ouverte ; un écran qui n'a
-//!   jamais répondu n'est pas relancé (le gestionnaire n'est prévenu que s'il y en a).
+//! Robustness mechanisms:
+//! - 600 ms **debounce** (a burst of events = a single scan);
+//! - 30 s **floor** between two scans triggered by a *noisy* hotplug
+//!   (a display whose link retrains in a loop); sleep, unlock and
+//!   manual request are never throttled;
+//! - **one scan at a time**, with a **generation** number: the late
+//!   result of a disowned scan is dropped;
+//! - 10 s **watchdog**: a stuck scan is disowned; after 3 consecutive
+//!   disownments we wait for a new event;
+//! - **pending** displays: retries at 2, 5, 10, 20 s then every 60 s with no
+//!   end, postponed while the interactive UI is open; a display that has
+//!   never answered is not retried (the manager is only notified if there is one).
 //!
-//! Le temps est celui de l'appelant (millisecondes monotones) : le gestionnaire ne
-//! dort jamais, il publie sa prochaine échéance ([`RescanManager::next_deadline`]).
+//! Time is the caller's (monotonic milliseconds): the manager never
+//! sleeps, it publishes its next deadline ([`RescanManager::next_deadline`]).
 
-/// Réglages (valeurs de départ de la spec, à recalibrer sur du matériel).
+/// Settings (starting values from the spec, to be recalibrated on hardware).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RescanConfig {
-    /// Débounce d'une rafale d'événements.
+    /// Debounce of a burst of events.
     pub debounce_ms: u64,
-    /// Plafond de report d'un scan par des événements qui se répètent.
+    /// Cap on how long repeated events can postpone a scan.
     pub max_defer_ms: u64,
-    /// Plancher entre deux scans de hotplug bruyant.
+    /// Floor between two noisy-hotplug scans.
     pub noisy_floor_ms: u64,
-    /// Durée au-delà de laquelle un scan est désavoué.
+    /// Duration beyond which a scan is disowned.
     pub watchdog_ms: u64,
-    /// Désaveux consécutifs avant d'attendre un nouvel événement.
+    /// Consecutive disownments before waiting for a new event.
     pub max_disavowals: u32,
-    /// Délai avant de relancer après un désaveu.
+    /// Delay before retrying after a disownment.
     pub disavow_retry_ms: u64,
-    /// Relances des écrans en attente ; le dernier palier se répète indéfiniment.
+    /// Retries of pending displays; the last step repeats indefinitely.
     pub waiting_ladder_ms: Vec<u64>,
 }
 
@@ -49,36 +49,36 @@ impl Default for RescanConfig {
     }
 }
 
-/// Origine d'une demande de scan.
+/// Origin of a scan request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Trigger {
-    /// Démarrage du démon : immédiat.
+    /// Daemon startup: immediate.
     Startup,
-    /// Demande de l'utilisateur : immédiate, jamais bridée.
+    /// User request: immediate, never throttled.
     Manual,
-    /// Réveil de veille, déverrouillage, écran rallumé, ou demande de la machine
-    /// d'états : débouncé, jamais bridé par le plancher.
+    /// Wake from sleep, unlock, display turned back on, or request from the state
+    /// machine: debounced, never throttled by the floor.
     Resume,
-    /// Branchement/débranchement d'écran : débouncé, bridé s'il est bruyant.
+    /// Display plugged/unplugged: debounced, throttled if noisy.
     Hotplug,
 }
 
-/// Action demandée à l'appelant.
+/// Action requested from the caller.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
-    /// Lancer une énumération portant ce numéro de génération.
+    /// Start an enumeration carrying this generation number.
     Start {
-        /// Numéro de génération à rendre dans [`RescanManager::finished`].
+        /// Generation number to hand back in [`RescanManager::finished`].
         generation: u64,
     },
 }
 
-/// Résultat d'un scan terminé.
+/// Result of a finished scan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ScanOutcome {
-    /// La liste a été acceptée (pas rejetée comme factice).
+    /// The list was accepted (not rejected as fake).
     pub accepted: bool,
-    /// Au moins un écran déjà connu est indisponible : il faut le relancer.
+    /// At least one already-known display is unavailable: it must be retried.
     pub waiting: bool,
 }
 
@@ -95,7 +95,7 @@ struct Running {
     started_ms: u64,
 }
 
-/// Gestionnaire de rescan.
+/// Rescan manager.
 #[derive(Clone, Debug)]
 pub struct RescanManager {
     config: RescanConfig,
@@ -112,7 +112,7 @@ pub struct RescanManager {
 }
 
 impl RescanManager {
-    /// Gestionnaire neuf.
+    /// Fresh manager.
     pub fn new(config: RescanConfig) -> Self {
         Self {
             config,
@@ -129,7 +129,7 @@ impl RescanManager {
         }
     }
 
-    /// Enregistre une demande de scan. Appeler ensuite [`RescanManager::poll`].
+    /// Records a scan request. Then call [`RescanManager::poll`].
     pub fn trigger(&mut self, now_ms: u64, trigger: Trigger, extra_delay_ms: u64) {
         self.halted = false;
         self.disavowals = 0;
@@ -151,8 +151,8 @@ impl RescanManager {
             },
             Some(p) => {
                 let cap = p.first_ms + self.config.max_defer_ms;
-                // Débounce « de queue » (chaque événement repousse l'échéance), plafonné pour
-                // qu'une rafale continue ne retarde pas le scan indéfiniment.
+                // "Trailing" debounce (each event pushes the deadline back), capped so
+                // that a continuous burst does not delay the scan indefinitely.
                 let merged = if immediate {
                     due.min(p.due_ms)
                 } else {
@@ -167,14 +167,14 @@ impl RescanManager {
         });
     }
 
-    /// Suspend (veille, session inactive) ou reprend le lancement des scans. Les
-    /// demandes reçues pendant la suspension sont conservées.
+    /// Suspends (sleep, inactive session) or resumes starting scans.
+    /// Requests received during the suspension are kept.
     pub fn set_suspended(&mut self, suspended: bool) {
         self.suspended = suspended;
     }
 
-    /// L'interface interactive (popup) est ouverte : les relances périodiques sont
-    /// reportées (une re-création la fermerait).
+    /// The interactive UI (popup) is open: periodic retries are
+    /// postponed (a re-creation would close it).
     pub fn set_ui_open(&mut self, open: bool) {
         self.ui_open = open;
     }
@@ -187,12 +187,12 @@ impl RescanManager {
         pending.due_ms.max(floor)
     }
 
-    /// Évalue les échéances à l'instant `now_ms` et renvoie les scans à lancer.
+    /// Evaluates deadlines at instant `now_ms` and returns the scans to start.
     pub fn poll(&mut self, now_ms: u64) -> Vec<Action> {
         if let Some(running) = self.running
             && now_ms >= running.started_ms + self.config.watchdog_ms
         {
-            // Scan bloqué : désavoué, son résultat tardif sera jeté.
+            // Stuck scan: disowned, its late result will be dropped.
             self.running = None;
             self.disavowals += 1;
             if self.disavowals >= self.config.max_disavowals {
@@ -241,8 +241,8 @@ impl RescanManager {
         }]
     }
 
-    /// Signale la fin d'un scan. Renvoie `false` si son résultat doit être **jeté**
-    /// (scan désavoué ou dépassé) ; sinon met à jour les relances.
+    /// Reports the end of a scan. Returns `false` if its result must be **dropped**
+    /// (disowned or outdated scan); otherwise updates the retries.
     pub fn finished(&mut self, now_ms: u64, generation: u64, outcome: ScanOutcome) -> bool {
         match self.running {
             Some(running) if running.generation == generation => self.running = None,
@@ -264,7 +264,7 @@ impl RescanManager {
         true
     }
 
-    /// Prochaine date à laquelle appeler [`RescanManager::poll`], s'il y en a une.
+    /// Next time at which to call [`RescanManager::poll`], if any.
     pub fn next_deadline(&self) -> Option<u64> {
         let mut deadlines = Vec::new();
         if let Some(running) = self.running {
@@ -280,22 +280,22 @@ impl RescanManager {
         deadlines.into_iter().min()
     }
 
-    /// Ce numéro de génération est celui du scan en cours (sinon son résultat est périmé).
+    /// This generation number is the one of the running scan (otherwise its result is stale).
     pub fn is_current(&self, generation: u64) -> bool {
         self.running.is_some_and(|r| r.generation == generation)
     }
 
-    /// Un scan est en cours.
+    /// A scan is running.
     pub fn is_running(&self) -> bool {
         self.running.is_some()
     }
 
-    /// Les scans automatiques sont arrêtés (3 désaveux) jusqu'au prochain événement.
+    /// Automatic scans are stopped (3 disownments) until the next event.
     pub fn is_halted(&self) -> bool {
         self.halted
     }
 
-    /// Une demande est en attente de son échéance.
+    /// A request is waiting for its deadline.
     pub fn has_pending(&self) -> bool {
         self.pending.is_some()
     }

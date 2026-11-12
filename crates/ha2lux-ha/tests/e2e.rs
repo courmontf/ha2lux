@@ -1,5 +1,5 @@
-//! Le vrai `HaLink` (REST + WebSocket) piloté par le superviseur, face à un faux Home
-//! Assistant qui parle HTTP et WebSocket sur le même port.
+//! The real `HaLink` (REST + WebSocket) driven by the supervisor, against a fake Home
+//! Assistant that speaks HTTP and WebSocket on the same port.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::net::SocketAddr;
@@ -49,7 +49,7 @@ async fn handle_http(
         "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
-    // Le client peut avoir déjà fermé : sans importance.
+    // The client may have already closed: irrelevant.
     let _ = stream.write_all(reply.as_bytes()).await;
 }
 
@@ -96,7 +96,7 @@ async fn handle_ws(
                 let event = json!({"id": subscription, "type": "event", "event": {"variables": {"trigger": {"to_state": {"state": value, "last_updated": now, "last_reported": now}}}}});
                 ws.send(Message::text(event.to_string())).await.unwrap();
             }
-            Ok(()) = kick.recv() => return, // coupe la connexion
+            Ok(()) = kick.recv() => return, // cuts the connection
         }
     }
 }
@@ -197,7 +197,7 @@ async fn real_link_rest_first_then_websocket_events_then_fallback_and_back() {
         Arc::new(system_unix_ms),
     );
 
-    // Le WebSocket s'ouvre en même temps que la première lecture REST : l'ordre n'est pas garanti.
+    // The WebSocket opens at the same time as the first REST read: the order is not guaranteed.
     let (mut first_measurement, mut ws_up) = (None, false);
     while first_measurement.is_none() || !ws_up {
         match expect(&mut source.outputs, "démarrage", |o| {
@@ -211,7 +211,7 @@ async fn real_link_rest_first_then_websocket_events_then_fallback_and_back() {
     }
     assert_eq!(first_measurement, Some(10.0));
 
-    // Événement poussé par le WebSocket.
+    // Event pushed by the WebSocket.
     ha.pushes.send("250".to_owned()).unwrap();
     assert_eq!(
         expect(&mut source.outputs, "mesure poussée", |o| *o
@@ -220,7 +220,7 @@ async fn real_link_rest_first_then_websocket_events_then_fallback_and_back() {
         Output::Measurement { lux: 250.0 }
     );
 
-    // Coupure du WebSocket : repli REST, puis reconnexion.
+    // WebSocket drop: REST fallback, then reconnection.
     *ha.state.lock().unwrap() = "75".to_owned();
     ha.kick.send(()).unwrap();
     expect(&mut source.outputs, "WebSocket coupé", |o| {
@@ -238,7 +238,7 @@ async fn real_link_rest_first_then_websocket_events_then_fallback_and_back() {
     assert!(ha.ws_sessions.load(Ordering::SeqCst) >= 2);
     assert!(ha.rest_reads.load(Ordering::SeqCst) >= 2);
 
-    // Confirmation rapprochée.
+    // Prompt confirmation.
     let before = ha.rest_reads.load(Ordering::SeqCst);
     source.poll_soon();
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -265,7 +265,7 @@ async fn real_link_with_a_wrong_token_reports_the_rejection_and_stays_quiet() {
     })
     .await;
     let before = ha.rest_reads.load(Ordering::SeqCst) + ha.ws_sessions.load(Ordering::SeqCst);
-    tokio::time::sleep(Duration::from_millis(500)).await; // pause d'authentification de 800 ms
+    tokio::time::sleep(Duration::from_millis(500)).await; // authentication pause of 800 ms
     let during = ha.rest_reads.load(Ordering::SeqCst) + ha.ws_sessions.load(Ordering::SeqCst);
     assert!(
         during <= before + 1,

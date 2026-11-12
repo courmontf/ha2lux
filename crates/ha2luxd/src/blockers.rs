@@ -1,13 +1,13 @@
-//! Blocages de l'atténuation à l'inactivité (spec §7.3) : inhibiteurs d'inactivité
-//! (lecteur vidéo, présentation, visioconférence), microphone et caméra.
+//! Idle-dimming blockers (spec §7.3): idle inhibitors
+//! (video player, presentation, video conference), microphone and camera.
 //!
-//! Chaque sonde est **tolérante** : un service absent (pas de GNOME, pas de PipeWire,
-//! pas de logind) n'est pas une erreur, il n'apporte simplement aucune information.
-//! Chaque sonde est bornée dans le temps.
+//! Each probe is **tolerant**: a missing service (no GNOME, no PipeWire,
+//! no logind) is not an error, it simply contributes no information.
+//! Each probe is time-bounded.
 //!
-//! Le plein écran n'est pas détecté : Wayland n'offre pas de moyen générique de le
-//! savoir. Les lecteurs vidéo passent par les inhibiteurs d'inactivité, que le
-//! compositeur et logind relaient.
+//! Fullscreen is not detected: Wayland offers no generic way to
+//! know it. Video players go through idle inhibitors, which the
+//! compositor and logind relay.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -16,16 +16,16 @@ use serde_json::Value;
 
 use crate::idle::{BlockReport, Blockers};
 
-/// Délai maximal d'une sonde.
+/// Maximum duration of a probe.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
-/// Taille maximale acceptée pour la sortie de `pw-dump`.
+/// Maximum accepted size for the `pw-dump` output.
 const MAX_PW_DUMP: usize = 8 * 1024 * 1024;
 
 type Inhibitor = (String, String, String, String, u32, u32);
 
-/// Inhibiteurs logind à prendre en compte : `idle` dans `what`, mode `block`, hors
-/// processus `own_pid` (ha2lux lui-même). Les inhibiteurs `sleep`, `shutdown`,
-/// `handle-*-key` (ex. PowerDevil) ou en mode `delay` n'empêchent pas d'atténuer.
+/// logind inhibitors to take into account: `idle` in `what`, mode `block`, excluding
+/// the `own_pid` process (ha2lux itself). `sleep`, `shutdown`,
+/// `handle-*-key` (e.g. PowerDevil) or `delay`-mode inhibitors do not prevent dimming.
 pub fn parse_logind_inhibitors(list: &[Inhibitor], own_pid: u32) -> Vec<String> {
     list.iter()
         .filter(|(what, _, _, mode, _, pid)| {
@@ -53,10 +53,10 @@ fn truthy(props: &Value, key: &str) -> bool {
     }
 }
 
-/// Analyse la sortie de `pw-dump` : microphone ou caméra utilisés quand un nœud de
-/// capture (`Audio/Source`, `Video/Source`, `Stream/Input/Audio`, `Stream/Input/Video`)
-/// est à l'état `running`. Les flux qui n'écoutent qu'un *moniteur* de sortie (vumètres)
-/// ne comptent pas.
+/// Parses the `pw-dump` output: microphone or camera in use when a capture
+/// node (`Audio/Source`, `Video/Source`, `Stream/Input/Audio`, `Stream/Input/Video`)
+/// is in the `running` state. Streams that only listen to an output *monitor* (VU meters)
+/// do not count.
 pub fn parse_pw_dump(json: &str) -> Vec<String> {
     let Ok(Value::Array(objects)) = serde_json::from_str::<Value>(json) else {
         return Vec::new();
@@ -95,8 +95,8 @@ pub fn parse_pw_dump(json: &str) -> Vec<String> {
     reasons
 }
 
-/// Processus (hors `own_pid`) qui ont un nœud `/dev/video*` ouvert : caméra utilisée
-/// directement (V4L2), sans passer par PipeWire. Lecture seule de `<proc>/<pid>/fd`.
+/// Processes (excluding `own_pid`) that have a `/dev/video*` node open: camera used
+/// directly (V4L2), bypassing PipeWire. Read-only access to `<proc>/<pid>/fd`.
 pub fn scan_video_users(proc_dir: &Path, own_pid: u32) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(proc_dir) else {
         return Vec::new();
@@ -114,7 +114,7 @@ pub fn scan_video_users(proc_dir: &Path, own_pid: u32) -> Vec<String> {
             continue;
         }
         let Ok(fds) = std::fs::read_dir(entry.path().join("fd")) else {
-            continue; // processus d'un autre utilisateur ou terminé
+            continue; // process of another user or already terminated
         };
         let uses_camera = fds
             .flatten()
@@ -163,29 +163,29 @@ mod proxies {
 
 use proxies::{GnomeSessionProxy, LogindInhibitorsProxy, PowerInhibitProxy};
 
-/// Réglages des sondes de blocage.
+/// Settings of the blocking probes.
 #[derive(Clone, Debug, Default)]
 pub struct BlockerOptions {
-    /// Connexion au bus système (inhibiteurs logind).
+    /// Connection to the system bus (logind inhibitors).
     pub system: Option<zbus::Connection>,
-    /// Connexion au bus de session (inhibiteurs du bureau).
+    /// Connection to the session bus (desktop inhibitors).
     pub session: Option<zbus::Connection>,
-    /// Interroger PipeWire (`pw-dump`) pour le microphone et la caméra.
+    /// Query PipeWire (`pw-dump`) for the microphone and camera.
     pub pipewire: bool,
-    /// Répertoire `/proc` à parcourir pour les caméras V4L2 ouvertes.
+    /// `/proc` directory to scan for open V4L2 cameras.
     pub proc_dir: Option<PathBuf>,
-    /// Programme `pw-dump`.
+    /// `pw-dump` program.
     pub pw_dump: Option<PathBuf>,
 }
 
-/// Sondes de blocage réelles.
+/// Real blocking probes.
 pub struct SystemBlockers {
     options: BlockerOptions,
     pw_missing: bool,
 }
 
 impl SystemBlockers {
-    /// Crée les sondes.
+    /// Creates the probes.
     pub fn new(options: BlockerOptions) -> Self {
         Self {
             options,

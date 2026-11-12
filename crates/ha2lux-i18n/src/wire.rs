@@ -1,10 +1,10 @@
-//! Messages localisables qui voyagent dans une erreur D-Bus.
+//! Localizable messages that travel in a D-Bus error.
 //!
-//! Le démon ne connaît pas la langue de l'appelant : il envoie une **clé de
-//! catalogue** et des arguments, que chaque client traduit. Format :
-//! `@clé?nom=valeur&nom=valeur`, avec `%`, `&`, `=` et les caractères de
-//! contrôle encodés en `%XX`. Un message qui ne commence pas par `@` est du
-//! texte brut (ancien démon, erreur de transport) et reste affiché tel quel.
+//! The daemon does not know the caller's language: it sends a **catalog
+//! key** and arguments, which each client translates. Format:
+//! `@key?name=value&name=value`, with `%`, `&`, `=` and control characters
+//! encoded as `%XX`. A message that does not start with `@` is
+//! plain text (old daemon, transport error) and is displayed as-is.
 
 use std::fmt::Write as _;
 
@@ -17,7 +17,7 @@ fn escape(value: &str, out: &mut String) {
         if matches!(c, '%' | '&' | '=') || c.is_control() {
             let mut buf = [0_u8; 4];
             for byte in c.encode_utf8(&mut buf).bytes() {
-                // Écrire dans une `String` ne peut pas échouer.
+                // Writing into a `String` cannot fail.
                 let _ = write!(out, "%{byte:02X}");
             }
         } else {
@@ -50,7 +50,7 @@ fn unescape(value: &str) -> String {
     String::from_utf8_lossy(&raw).into_owned()
 }
 
-/// Encode `key` et ses arguments pour le transport.
+/// Encodes `key` and its arguments for transport.
 pub fn encode(key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
     let mut out = format!("@{key}");
     for (i, (name, value)) in args.iter().enumerate() {
@@ -62,7 +62,7 @@ pub fn encode(key: &str, args: &[(&str, &dyn std::fmt::Display)]) -> String {
     out
 }
 
-/// Décode un message encodé par [`encode`] ; `None` pour du texte brut.
+/// Decodes a message encoded by [`encode`]; `None` for plain text.
 pub fn decode(wire: &str) -> Option<(String, Vec<(String, String)>)> {
     let rest = wire.strip_prefix('@')?;
     let (key, query) = rest.split_once('?').unwrap_or((rest, ""));
@@ -79,8 +79,8 @@ pub fn decode(wire: &str) -> Option<(String, Vec<(String, String)>)> {
 }
 
 impl Localizer {
-    /// Traduit un message reçu du démon. Le texte brut est rendu tel quel, et une
-    /// clé inconnue de cette version garde sa forme encodée (diagnostic lisible).
+    /// Translates a message received from the daemon. Plain text is rendered as-is, and a
+    /// key unknown to this version keeps its encoded form (readable diagnostics).
     pub fn localize(&self, wire: &str) -> String {
         let Some((key, values)) = decode(wire) else {
             return wire.to_owned();
@@ -97,7 +97,7 @@ impl Localizer {
     }
 }
 
-/// Traduit un message du démon dans la langue du processus.
+/// Translates a daemon message into the process language.
 pub fn localize(wire: &str) -> String {
     crate::current().localize(wire)
 }
@@ -139,7 +139,7 @@ mod tests {
         assert_eq!(args.len(), 3);
     }
 
-    /// Textes exacts des messages du démon (inchangés par rapport à avant l'i18n).
+    /// Exact texts of the daemon's messages (unchanged from before i18n).
     #[test]
     fn daemon_messages_render_exactly() {
         let fr = Localizer::try_new("fr").expect("catalogue fr");
@@ -221,7 +221,7 @@ mod tests {
             if !expected.starts_with("identifiant") {
                 assert_eq!(text, expected, "{wire}");
             } else {
-                // Le maximum réel est une constante du démon : seule la forme compte ici.
+                // The real maximum is a daemon constant: only the shape matters here.
                 assert!(
                     text.starts_with("identifiant d'écran invalide (1 à "),
                     "{text}"

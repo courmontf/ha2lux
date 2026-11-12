@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Dépendances système
+      - name: System dependencies
         run: sudo apt-get update && sudo apt-get install -y dbus pkg-config
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # tout l'historique : un secret commité puis supprimé reste détectable
+          fetch-depth: 0   # full history: a secret committed then deleted stays detectable
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

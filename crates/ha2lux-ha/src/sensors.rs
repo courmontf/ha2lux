@@ -1,6 +1,6 @@
-//! Liste des capteurs d'éclairement (classe `illuminance`), avec leur zone, pour l'aide
-//! à la configuration. Passe par un gabarit rendu côté serveur par le WebSocket : un
-//! compte **non administrateur** suffit.
+//! List of illuminance sensors (`illuminance` class), with their area, to help with
+//! configuration. Goes through a template rendered server-side over the WebSocket: a
+//! **non-administrator** account is enough.
 
 use ha2lux_core::config::is_valid_entity_id;
 
@@ -8,20 +8,20 @@ use crate::config::HaConfig;
 use crate::error::HaError;
 use crate::ws::WsClient;
 
-/// Gabarit : une ligne `entité|nom|zone` par capteur d'éclairement.
+/// Template: one `entity|name|area` line per illuminance sensor.
 pub const SENSOR_TEMPLATE: &str = "{% for s in states.sensor | selectattr('attributes.device_class', 'defined') | selectattr('attributes.device_class', 'eq', 'illuminance') %}{{ s.entity_id }}|{{ s.name | replace('|', '/') | replace('\\n', ' ') }}|{{ (area_name(s.entity_id) or '') | replace('|', '/') }}\n{% endfor %}";
 
-/// Nombre maximal de capteurs conservés.
+/// Maximum number of sensors kept.
 pub const MAX_SENSORS: usize = 200;
 
-/// Un capteur d'éclairement.
+/// An illuminance sensor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SensorInfo {
-    /// Identifiant d'entité (validé).
+    /// Entity identifier (validated).
     pub entity: String,
-    /// Nom d'affichage (sans caractère de contrôle, borné).
+    /// Display name (no control characters, bounded).
     pub name: String,
-    /// Zone (pièce), vide si inconnue.
+    /// Area (room), empty if unknown.
     pub area: String,
 }
 
@@ -34,8 +34,8 @@ fn clean(text: &str) -> String {
         .to_owned()
 }
 
-/// Analyse la sortie du gabarit : lignes invalides, identifiants douteux (`/`, `..`, `?`…)
-/// et doublons ignorés ; résultat trié et borné.
+/// Parses the template output: invalid lines, dubious identifiers (`/`, `..`, `?`…)
+/// and duplicates are ignored; result sorted and bounded.
 pub fn parse_sensor_lines(text: &str) -> Vec<SensorInfo> {
     let mut sensors: Vec<SensorInfo> = Vec::new();
     for line in text.lines() {
@@ -61,7 +61,7 @@ pub fn parse_sensor_lines(text: &str) -> Vec<SensorInfo> {
     sensors
 }
 
-/// Liste les capteurs d'éclairement de l'instance (connexion dédiée, refermée ensuite).
+/// Lists the instance's illuminance sensors (dedicated connection, closed afterwards).
 pub async fn list_illuminance_sensors(config: &HaConfig) -> Result<Vec<SensorInfo>, HaError> {
     let mut ws = WsClient::connect(config).await?;
     let text = ws.render_template(SENSOR_TEMPLATE).await?;

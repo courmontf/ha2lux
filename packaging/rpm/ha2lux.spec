@@ -1,8 +1,8 @@
-# NON TESTÉ : squelette de paquet RPM (Fedora/openSUSE). À valider avant tout usage.
+# UNTESTED: RPM package skeleton (Fedora/openSUSE). Validate before any use.
 Name:           ha2lux
 Version:        0.7.0
 Release:        1%{?dist}
-Summary:        Réglage de la luminosité de tous les écrans (DDC/CI, backlight)
+Summary:        Brightness control for all displays (DDC/CI, backlight)
 License:        MIT
 URL:            https://example.invalid/ha2lux
 Source0:        %{name}-%{version}.tar.gz
@@ -11,9 +11,9 @@ Requires:       dbus
 Recommends:     i2c-tools
 
 %description
-Démon utilisateur, CLI et icône de zone de notification qui règlent la luminosité de
-tous les écrans (DDC/CI par /dev/i2c-*, backlight du portable) avec niveau maître,
-presets, planning, atténuation à l'inactivité et auto-luminosité par capteur Home Assistant.
+User daemon, CLI and notification-area icon that set the brightness of all displays
+(DDC/CI through /dev/i2c-*, laptop backlight) with a master level, presets, a schedule,
+idle dimming and auto-brightness from a Home Assistant sensor.
 
 %prep
 %autosetup

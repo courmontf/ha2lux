@@ -1,17 +1,17 @@
-//! Lissage des mesures de lux avec confirmation des grands changements (spec §8.5).
+//! Smoothing of lux measurements with confirmation of large changes (spec §8.5).
 
 use crate::curve::{log_scale, lux_from_log, sanitize_lux};
 
-/// Réglages du filtre (exposés en configuration, `auto.tuning.*`).
+/// Filter settings (exposed in configuration, `auto.tuning.*`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FilterParams {
-    /// Écart minimal en échelle log pour un « grand » changement.
+    /// Minimum gap on the log scale for a "large" change.
     pub big_log_delta: f64,
-    /// Écart minimal en lux pour un « grand » changement.
+    /// Minimum gap in lux for a "large" change.
     pub big_lux_delta: f64,
-    /// Coefficient du lissage lent (`état += alpha × écart`).
+    /// Slow smoothing coefficient (`state += alpha × gap`).
     pub alpha: f64,
-    /// Proximité (échelle log) de deux mesures pour confirmer un saut.
+    /// Closeness (log scale) of two measurements to confirm a jump.
     pub confirm_close: f64,
 }
 
@@ -26,8 +26,8 @@ impl Default for FilterParams {
     }
 }
 
-/// Filtre de lux : lissage exponentiel dans l'échelle log, avec retenue puis
-/// confirmation des grands écarts.
+/// Lux filter: exponential smoothing on the log scale, with hold then
+/// confirmation of large gaps.
 #[derive(Clone, Debug, Default)]
 pub struct Filter {
     params: FilterParams,
@@ -36,7 +36,7 @@ pub struct Filter {
 }
 
 impl Filter {
-    /// Filtre avec les réglages donnés.
+    /// Filter with the given settings.
     pub fn new(params: FilterParams) -> Self {
         Self {
             params,
@@ -45,13 +45,13 @@ impl Filter {
         }
     }
 
-    /// Réinitialise l'état (retour de HA, changement de configuration).
+    /// Resets the state (HA back online, configuration change).
     pub fn reset(&mut self) {
         self.state = None;
         self.pending = None;
     }
 
-    /// Intègre une mesure (bornée à `[0, 10⁶]` ; `NaN` compte pour 0).
+    /// Integrates a measurement (clamped to `[0, 10⁶]`; `NaN` counts as 0).
     pub fn push(&mut self, lux: f64) {
         let lux = sanitize_lux(lux);
         let x = log_scale(lux);
@@ -77,23 +77,23 @@ impl Filter {
         }
     }
 
-    /// Lux lissé (0 tant qu'aucune mesure n'a été reçue).
+    /// Smoothed lux (0 until a measurement has been received).
     pub fn smoothed_lux(&self) -> f64 {
         self.state.map_or(0.0, lux_from_log)
     }
 
-    /// Vrai si un grand écart est retenu en attendant confirmation.
+    /// True if a large gap is held pending confirmation.
     pub fn is_pending(&self) -> bool {
         self.pending.is_some()
     }
 
-    /// Lux le plus récent : la mesure en attente si elle existe, sinon le lux lissé.
+    /// Most recent lux: the pending measurement if there is one, otherwise the smoothed lux.
     pub fn latest_lux(&self) -> f64 {
         self.pending
             .map_or_else(|| self.smoothed_lux(), lux_from_log)
     }
 
-    /// Vrai si au moins une mesure a été intégrée.
+    /// True if at least one measurement has been integrated.
     pub fn has_value(&self) -> bool {
         self.state.is_some()
     }

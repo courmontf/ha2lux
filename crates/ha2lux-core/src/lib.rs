@@ -1,5 +1,5 @@
-//! Cœur pur de ha2lux : règles métier déterministes, sans entrée/sortie,
-//! sans horloge système et sans runtime asynchrone.
+//! Pure core of ha2lux: deterministic business rules, with no I/O,
+//! no system clock and no async runtime.
 #![forbid(unsafe_code)]
 
 pub mod backend;

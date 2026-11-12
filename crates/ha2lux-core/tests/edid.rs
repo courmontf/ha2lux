@@ -1,4 +1,4 @@
-//! EDID : analyse et identité stable (T-DDC-08 côté pur).
+//! EDID: parsing and stable identity (T-DDC-08, pure side).
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use ha2lux_core::{Edid, EdidError};
 use proptest::prelude::*;
@@ -71,7 +71,7 @@ fn t_ddc_08_identical_models_with_different_serials_stay_distinct() {
     let a = Edid::parse(&block(111, None)).unwrap();
     let b = Edid::parse(&block(222, None)).unwrap();
     assert_ne!(a.identity("DP-1"), b.identity("DP-1"));
-    // L'identité suit l'écran, pas le connecteur ni l'ordre d'énumération.
+    // The identity follows the display, not the connector nor the enumeration order.
     assert_eq!(a.identity("DP-1"), a.identity("HDMI-A-3"));
     let order1 = [a.identity("DP-1"), b.identity("DP-2")];
     let order2 = [b.identity("DP-1"), a.identity("DP-2")];

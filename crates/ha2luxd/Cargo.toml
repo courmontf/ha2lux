@@ -1,6 +1,6 @@
 [package]
 name = "ha2luxd"
-description = "Démon utilisateur ha2lux."
+description = "ha2lux user daemon."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -47,13 +47,13 @@ workspace = true
 
 [package.metadata.deb]
 name = "ha2lux"
-maintainer = "à renseigner"
+maintainer = "to be filled in"
 copyright = "2026, courmontf"
 section = "utils"
 priority = "optional"
 depends = "$auto, dbus"
 recommends = "i2c-tools"
-extended-description = "Démon utilisateur, CLI et icône qui règlent la luminosité de tous les écrans (DDC/CI, backlight)."
+extended-description = "User daemon, CLI and tray icon that set the brightness of all displays (DDC/CI, backlight)."
 assets = [
   ["../../target/release/ha2luxd", "usr/bin/", "755"],
   ["../../target/release/ha2lux", "usr/bin/", "755"],

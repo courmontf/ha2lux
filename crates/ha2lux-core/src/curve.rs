@@ -1,4 +1,4 @@
-//! Courbe lux → niveau maître et apprentissage (spec §8.4 et §8.6).
+//! lux → master level curve and learning (spec §8.4 and §8.6).
 
 use std::fmt;
 
@@ -6,26 +6,26 @@ use thiserror::Error;
 
 use crate::range::clamp_percent;
 
-/// Nombre maximal de points d'une courbe.
+/// Maximum number of points in a curve.
 pub const MAX_CURVE_POINTS: usize = 8;
-/// Éclairement maximal accepté (lux).
+/// Maximum accepted illuminance (lux).
 pub const MAX_LUX: f64 = 1_000_000.0;
 
-/// Écart (en échelle log) sous lequel deux points sont « à la même lumière ».
+/// Gap (on the log scale) below which two points are "at the same light".
 const SAME_LIGHT_DELTA: f64 = 0.15;
 
-/// Erreurs de sérialisation de la courbe.
+/// Curve serialization errors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum CurveError {
-    /// Le texte dépasse la taille permise ; aucune troncature silencieuse.
+    /// The text exceeds the allowed size; no silent truncation.
     #[error("curve too long for the allowed size ({max} characters)")]
     TooLong {
-        /// Taille maximale demandée.
+        /// Maximum size requested.
         max: usize,
     },
 }
 
-/// Ramène un éclairement dans `[0, 10⁶]` ; `NaN` et `-∞` donnent 0.
+/// Clamps an illuminance into `[0, 10⁶]`; `NaN` and `-∞` give 0.
 pub fn sanitize_lux(lux: f64) -> f64 {
     if lux.is_nan() {
         0.0
@@ -34,40 +34,40 @@ pub fn sanitize_lux(lux: f64) -> f64 {
     }
 }
 
-/// Échelle logarithmique décalée : `log10(lux + 10)`.
+/// Shifted logarithmic scale: `log10(lux + 10)`.
 pub fn log_scale(lux: f64) -> f64 {
     (sanitize_lux(lux) + 10.0).log10()
 }
 
-/// Inverse de [`log_scale`] : lux correspondant à une abscisse, borné ≥ 0.
+/// Inverse of [`log_scale`]: lux corresponding to an abscissa, clamped to ≥ 0.
 pub fn lux_from_log(x: f64) -> f64 {
     (10f64.powf(x) - 10.0).max(0.0)
 }
 
-/// Point de courbe.
+/// Curve point.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CurvePoint {
-    /// Éclairement en lux (`0..=10⁶`).
+    /// Illuminance in lux (`0..=10⁶`).
     pub lux: f64,
-    /// Niveau maître `0..=100`.
+    /// Master level `0..=100`.
     pub level: u8,
-    /// Instant d'apprentissage (secondes Unix), s'il est connu.
+    /// Learning instant (Unix seconds), if known.
     pub learned_at: Option<u64>,
 }
 
-/// Garde-fous d'apprentissage.
+/// Learning safeguards.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LearnPolicy {
-    /// Ignore une observation à moins de `min_delta` points de la valeur
-    /// déjà prédite (0 = désactivé).
+    /// Ignores an observation within `min_delta` points of the value
+    /// already predicted (0 = disabled).
     pub min_delta: u8,
-    /// Nombre maximal de points contredits supprimables ; au-delà,
-    /// l'observation est refusée (`None` = illimité).
+    /// Maximum number of contradicted points that may be removed; beyond that,
+    /// the observation is rejected (`None` = unlimited).
     pub max_contradicted: Option<usize>,
 }
 
 impl LearnPolicy {
-    /// Aucun garde-fou : algorithme de base de la spec §8.6.
+    /// No safeguards: the base algorithm of spec §8.6.
     pub const UNGUARDED: LearnPolicy = LearnPolicy {
         min_delta: 0,
         max_contradicted: None,
@@ -75,7 +75,7 @@ impl LearnPolicy {
 }
 
 impl Default for LearnPolicy {
-    /// Garde-fous recommandés : plancher d'écart de 2, au plus 2 contradictions.
+    /// Recommended safeguards: gap floor of 2, at most 2 contradictions.
     fn default() -> Self {
         Self {
             min_delta: 2,
@@ -84,22 +84,22 @@ impl Default for LearnPolicy {
     }
 }
 
-/// Résultat d'une tentative d'apprentissage.
+/// Result of a learning attempt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LearnOutcome {
-    /// Le point a été intégré à la courbe.
+    /// The point was merged into the curve.
     Learned,
-    /// Niveau trop proche de la valeur déjà prédite : rien appris.
+    /// Level too close to the already predicted value: nothing learned.
     IgnoredTooClose,
-    /// Trop de points contredits : observation refusée, courbe inchangée.
+    /// Too many contradicted points: observation rejected, curve unchanged.
     Refused {
-        /// Nombre de points qui auraient dû être supprimés.
+        /// Number of points that would have had to be removed.
         contradicted: usize,
     },
 }
 
-/// Courbe lux → niveau maître : au plus 8 points triés par lux croissant, à
-/// niveaux non décroissants. Une courbe vide équivaut à la courbe par défaut.
+/// lux → master level curve: at most 8 points sorted by increasing lux, with
+/// non-decreasing levels. An empty curve is equivalent to the default curve.
 #[derive(Clone, Debug, Default)]
 pub struct Curve {
     points: Vec<CurvePoint>,
@@ -107,8 +107,8 @@ pub struct Curve {
 }
 
 impl PartialEq for Curve {
-    /// Deux courbes sont égales si leurs points le sont (l'instantané
-    /// d'annulation n'intervient pas).
+    /// Two curves are equal if their points are (the undo
+    /// snapshot does not count).
     fn eq(&self, other: &Self) -> bool {
         self.points == other.points
     }
@@ -148,9 +148,9 @@ fn evaluate(points: &[CurvePoint], lux: f64) -> u8 {
     last.level
 }
 
-/// Étapes 2 à 5 de la mise à jour (sans garde-fous) : retire les points à la
-/// même lumière, les points contredits, évince si plein, insère en triant.
-/// Renvoie le nombre de points contredits supprimés.
+/// Steps 2 to 5 of the update (without safeguards): removes points at the
+/// same light, contradicted points, evicts if full, inserts keeping order.
+/// Returns the number of contradicted points removed.
 fn insert_point(points: &mut Vec<CurvePoint>, new: CurvePoint) -> usize {
     let x_new = log_scale(new.lux);
     points.retain(|p| (log_scale(p.lux) - x_new).abs() >= SAME_LIGHT_DELTA);
@@ -181,17 +181,17 @@ fn insert_point(points: &mut Vec<CurvePoint>, new: CurvePoint) -> usize {
 }
 
 impl Curve {
-    /// Courbe vide (équivalente à la courbe par défaut à l'évaluation).
+    /// Empty curve (equivalent to the default curve when evaluated).
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Points explicites (vide = courbe par défaut).
+    /// Explicit points (empty = default curve).
     pub fn points(&self) -> &[CurvePoint] {
         &self.points
     }
 
-    /// Points effectivement utilisés pour l'évaluation.
+    /// Points actually used for evaluation.
     pub fn effective_points(&self) -> Vec<CurvePoint> {
         if self.points.is_empty() {
             default_points()
@@ -200,10 +200,10 @@ impl Curve {
         }
     }
 
-    /// Niveau maître 0-100 pour un éclairement.
+    /// Master level 0-100 for an illuminance.
     ///
-    /// Plat hors des extrémités ; interpolation linéaire en `log10(lux + 10)`
-    /// entre deux points, arrondie à l'entier le plus proche.
+    /// Flat outside the endpoints; linear interpolation in `log10(lux + 10)`
+    /// between two points, rounded to the nearest integer.
     pub fn level_at(&self, lux: f64) -> u8 {
         if self.points.is_empty() {
             evaluate(&default_points(), lux)
@@ -212,11 +212,11 @@ impl Curve {
         }
     }
 
-    /// Apprend l'observation `(lux, niveau choisi)`.
+    /// Learns the observation `(lux, chosen level)`.
     ///
-    /// Les entrées sont bornées (lux `[0, 10⁶]`, niveau `[0, 100]`). Une
-    /// courbe vide part de la courbe par défaut. L'instantané précédent est
-    /// conservé pour [`Curve::undo`] seulement si la courbe change.
+    /// Inputs are clamped (lux `[0, 10⁶]`, level `[0, 100]`). An empty
+    /// curve starts from the default curve. The previous snapshot is
+    /// kept for [`Curve::undo`] only if the curve changes.
     pub fn learn(
         &mut self,
         lux: f64,
@@ -244,7 +244,7 @@ impl Curve {
         LearnOutcome::Learned
     }
 
-    /// Annule le dernier apprentissage. Renvoie `false` s'il n'y a rien à annuler.
+    /// Undoes the last learning. Returns `false` if there is nothing to undo.
     pub fn undo(&mut self) -> bool {
         match self.undo.take() {
             Some(previous) => {
@@ -255,14 +255,14 @@ impl Curve {
         }
     }
 
-    /// Oublie la courbe apprise (retour à la courbe par défaut).
+    /// Forgets the learned curve (back to the default curve).
     pub fn reset(&mut self) {
         self.undo = None;
         self.points.clear();
     }
 
-    /// Supprime les points appris avant `now - max_age_secs` (les points sans
-    /// horodatage sont conservés). Renvoie le nombre de points supprimés.
+    /// Removes points learned before `now - max_age_secs` (points without a
+    /// timestamp are kept). Returns the number of points removed.
     pub fn prune_older_than(&mut self, now: u64, max_age_secs: u64) -> usize {
         let before = self.points.len();
         self.points.retain(|p| {
@@ -272,9 +272,9 @@ impl Curve {
         before - self.points.len()
     }
 
-    /// Relit une courbe `lux:niveau,lux:niveau,…`. Les éléments illisibles ou
-    /// hors bornes sont ignorés ; les autres passent par l'algorithme
-    /// d'insertion (tri, contradictions, plafond de 8 points).
+    /// Reads back a `lux:level,lux:level,…` curve. Unreadable or out-of-range
+    /// elements are ignored; the others go through the insertion algorithm
+    /// (sorting, contradictions, 8-point cap).
     pub fn parse(text: &str) -> Self {
         let mut points = Vec::new();
         for token in text.split(',') {
@@ -300,7 +300,7 @@ impl Curve {
         Self { points, undo: None }
     }
 
-    /// Texte `lux:niveau,…` ; échoue au lieu de tronquer si plus long que `max`.
+    /// Text `lux:level,…`; fails instead of truncating if longer than `max`.
     pub fn to_text_bounded(&self, max: usize) -> Result<String, CurveError> {
         let text = self.to_string();
         if text.len() > max {
