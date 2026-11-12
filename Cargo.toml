@@ -24,3 +24,9 @@ missing_docs = "warn"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+
+# Les binaires de test (plus de 300) embarquent chacun toutes les bibliothèques : avec les
+# informations de débogage complètes, `target/debug` dépassait 35 Go. On garde les numéros de
+# ligne (messages d'erreur, backtraces) et on supprime le reste.
+[profile.dev]
+debug = "line-tables-only"
