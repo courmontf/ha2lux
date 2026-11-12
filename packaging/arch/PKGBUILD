@@ -1,6 +1,6 @@
 # NON TESTÉ : squelette de paquet Arch Linux. À valider sur une machine Arch avant tout usage.
 pkgname=ha2lux
-pkgver=0.1.0
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="Réglage de la luminosité de tous les écrans (DDC/CI, backlight) — démon, CLI et icône"
 arch=('x86_64' 'aarch64')

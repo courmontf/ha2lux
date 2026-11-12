@@ -24,7 +24,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 zbus = { version = "5.13.2", default-features = false, features = ["tokio"] }
 thiserror.workspace = true
-ha2lux-ipc = { version = "0.1.0", path = "../ha2lux-ipc" }
+ha2lux-ipc = { path = "../ha2lux-ipc" }
 
 [lints]
 workspace = true
