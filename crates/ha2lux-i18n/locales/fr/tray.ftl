@@ -24,6 +24,12 @@ tray-schedule-resume = Planning suspendu jusqu'à { $resume }
 tray-idle-dim = Atténuation à l'inactivité ({ $level } % après { $minutes } min)
 tray-rescan = Re-scanner les écrans
 tray-settings = Réglages…
+tray-about = À propos
+tray-about-tray = Icône ha2lux-tray { $version }
+tray-about-daemon = Démon ha2luxd { $version }
+tray-about-daemon-unreachable = Démon ha2luxd : injoignable
+tray-about-daemon-unknown = Démon ha2luxd : version inconnue
+tray-about-mismatch = Versions différentes : redémarrez le démon
 
 ## Infobulle
 tray-tooltip-unreachable = démon injoignable

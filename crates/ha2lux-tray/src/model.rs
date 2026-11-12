@@ -37,6 +37,8 @@ pub struct TrayState {
     pub auto_configured: bool,
     /// Santé du lien Home Assistant.
     pub ha_health: String,
+    /// Version du démon (vide si inconnue).
+    pub daemon_version: String,
     /// Écrans.
     pub displays: Vec<DisplayDto>,
     /// Presets (nom, niveau).
@@ -78,6 +80,7 @@ impl TrayState {
             auto_enabled: get(status, "auto_enabled").unwrap_or_default(),
             auto_configured: get(status, "auto_configured").unwrap_or_default(),
             ha_health: get(status, "ha_health").unwrap_or_default(),
+            daemon_version: get(status, "version").unwrap_or_default(),
             displays,
             presets,
         }
@@ -168,6 +171,33 @@ fn note(label: impl Into<String>) -> Entry {
 }
 
 /// Niveaux proposés dans les sous-menus (le popup de glisseurs de la spec n'existe pas en SNI).
+/// Version de l'icône (celle de tout le projet).
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Sous-menu « À propos » : versions de l'icône et du démon, avec un avertissement
+/// si elles diffèrent (démon pas redémarré après une mise à jour).
+fn about(state: &TrayState) -> Entry {
+    let mut entries = vec![note(t!("tray-about-tray", version = VERSION))];
+    if !state.reachable {
+        entries.push(note(t!("tray-about-daemon-unreachable")));
+    } else if state.daemon_version.is_empty() {
+        entries.push(note(t!("tray-about-daemon-unknown")));
+    } else {
+        entries.push(note(t!(
+            "tray-about-daemon",
+            version = state.daemon_version.as_str()
+        )));
+        if state.daemon_version != VERSION {
+            entries.push(note(t!("tray-about-mismatch")));
+        }
+    }
+    Entry::Sub {
+        label: t!("tray-about"),
+        enabled: true,
+        entries,
+    }
+}
+
 const LEVELS: [u32; 11] = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
 fn levels(make: impl Fn(u32) -> Action, current: Option<u8>) -> Vec<Entry> {
@@ -204,6 +234,7 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
     let mut menu = Vec::new();
     if !state.reachable {
         menu.push(note(t!("tray-daemon-unreachable")));
+        menu.push(about(state));
         menu.push(Entry::Separator);
         menu.push(item(t!("tray-quit"), Action::Quit));
         return menu;
@@ -297,6 +328,7 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
     menu.push(Entry::Separator);
     menu.push(item(t!("tray-rescan"), Action::Rescan));
     menu.push(item(t!("tray-settings"), Action::OpenSettings));
+    menu.push(about(state));
     menu.push(item(t!("tray-quit"), Action::Quit));
     menu
 }

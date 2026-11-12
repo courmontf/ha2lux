@@ -24,6 +24,12 @@ tray-schedule-resume = Schedule paused until { $resume }
 tray-idle-dim = Dim when idle ({ $level }% after { $minutes } min)
 tray-rescan = Rescan displays
 tray-settings = Settings…
+tray-about = About
+tray-about-tray = Tray icon ha2lux-tray { $version }
+tray-about-daemon = Daemon ha2luxd { $version }
+tray-about-daemon-unreachable = Daemon ha2luxd: unreachable
+tray-about-daemon-unknown = Daemon ha2luxd: unknown version
+tray-about-mismatch = Versions differ: restart the daemon
 
 ## Tooltip
 tray-tooltip-unreachable = daemon unreachable

@@ -29,7 +29,78 @@ cargo build --release          # binaires dans target/release/
 
 Rust 1.85 ou plus récent (voir `rust-toolchain.toml`).
 
-## Installation (manuelle — ha2lux ne modifie jamais votre système)
+## Installation
+
+### Installation rapide (depuis les sources)
+
+Il faut une chaîne Rust 1.85 ou plus récente ([rustup](https://rustup.rs)) et un éditeur de liens
+C (`build-essential` sous Debian/Ubuntu, `base-devel` sous Arch, `gcc` sous Fedora). Puis, à la
+racine du dépôt, copiez-collez :
+
+```sh
+# 1. Compiler
+cargo build --release
+
+# 2. Installer les programmes pour votre utilisateur (sans sudo)
+mkdir -p ~/.local/bin
+install -Dm755 target/release/ha2luxd target/release/ha2lux target/release/ha2lux-tray -t ~/.local/bin/
+sed "s|/usr/bin/ha2luxd|$HOME/.local/bin/ha2luxd|" packaging/systemd/ha2luxd.service \
+    | install -Dm644 /dev/stdin ~/.config/systemd/user/ha2luxd.service
+install -Dm644 packaging/dbus/org.ha2lux.Daemon.service ~/.local/share/dbus-1/services/org.ha2lux.Daemon.service
+sed "s|/usr/bin/ha2lux-tray|$HOME/.local/bin/ha2lux-tray|" packaging/xdg/autostart/ha2lux-tray.desktop \
+    | install -Dm644 /dev/stdin ~/.config/autostart/ha2lux-tray.desktop
+
+# 3. Autoriser l'accès aux bus I²C des écrans (sudo requis ; moniteurs externes seulement)
+sudo install -m644 packaging/modules-load.d/ha2lux-i2c-dev.conf /etc/modules-load.d/ && sudo modprobe i2c-dev
+sudo install -m644 packaging/udev/60-ha2lux-i2c.rules /etc/udev/rules.d/ \
+    && sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=i2c-dev
+
+# 4. Démarrer le démon et l'icône
+systemctl --user daemon-reload && systemctl --user enable --now ha2luxd
+setsid -f ~/.local/bin/ha2lux-tray >/dev/null 2>&1
+
+# 5. Vérifier que tout fonctionne
+ha2lux doctor && ha2lux get
+```
+
+Remarques :
+
+- `~/.local/bin` doit être dans votre `PATH` (c'est le cas par défaut sur la plupart des
+  distributions ; sinon ajoutez `export PATH="$HOME/.local/bin:$PATH"` à votre profil de shell).
+- L'étape 3 ne concerne que les **moniteurs externes** ; l'écran interne d'un portable fonctionne
+  sans. Si `ha2lux doctor` signale encore « accès refusé » après l'étape 3, fermez puis rouvrez
+  votre session.
+- L'icône démarrera toute seule à votre prochaine connexion. Sous GNOME, installez d'abord
+  l'extension « AppIndicator », sinon aucune icône n'apparaît.
+- Rien d'autre que les fichiers ci-dessus n'est touché : ha2lux ne modifie jamais votre système
+  de lui-même.
+
+### Mise à jour
+
+```sh
+git pull && cargo build --release \
+&& install -Dm755 target/release/ha2luxd target/release/ha2lux target/release/ha2lux-tray -t ~/.local/bin/ \
+&& systemctl --user restart ha2luxd \
+&& pkill -x ha2lux-tray; setsid -f ~/.local/bin/ha2lux-tray >/dev/null 2>&1
+```
+
+Redémarrez toujours le démon après une mise à jour : le démon et les autres programmes doivent
+avoir la même version. Le sous-menu **À propos** de l'icône affiche les deux versions et avertit
+si elles diffèrent.
+
+### Désinstallation
+
+```sh
+systemctl --user disable --now ha2luxd; pkill -x ha2lux-tray
+rm -f ~/.local/bin/{ha2luxd,ha2lux,ha2lux-tray} ~/.config/systemd/user/ha2luxd.service \
+      ~/.local/share/dbus-1/services/org.ha2lux.Daemon.service ~/.config/autostart/ha2lux-tray.desktop
+sudo rm -f /etc/udev/rules.d/60-ha2lux-i2c.rules /etc/modules-load.d/ha2lux-i2c-dev.conf
+```
+
+Vos réglages restent dans `~/.config/ha2lux/` et `~/.local/state/ha2lux/` (supprimez-les si vous
+le souhaitez).
+
+### Installation manuelle (détails)
 
 1. **Binaires** : copiez `ha2luxd`, `ha2lux`, `ha2lux-tray` dans `~/.local/bin/` (ou `/usr/bin/`).
 2. **Droits sur les bus I²C** (écrans externes seulement) :
@@ -41,7 +112,7 @@ Rust 1.85 ou plus récent (voir `rust-toolchain.toml`).
    `systemctl --user enable --now ha2luxd`. Le fichier `packaging/dbus/org.ha2lux.Daemon.service`
    permet aussi un démarrage à la demande.
 4. **Icône** (facultatif) : lancez `ha2lux-tray`, ou copiez `packaging/xdg/autostart/ha2lux-tray.desktop`
-   dans `~/.config/autostart/`. Sous GNOME, installez l'extension « AppIndicator ».
+   dans `~/.config/autostart/` (adaptez son chemin `Exec=`). Sous GNOME, installez l'extension « AppIndicator ».
 
 Des squelettes de paquets (Arch, RPM, Debian) sont dans `packaging/` — **non testés**.
 
@@ -76,7 +147,7 @@ votre bureau.
 ### Icône de zone de notification
 
 Menu : niveau courant, « Tous les écrans » et un sous-menu par écran (niveaux de 10 en 10 %),
-presets, auto-luminosité / planning / atténuation, re-scan, réglages (ouvre `config.toml`),
+presets, auto-luminosité / planning / atténuation, re-scan, réglages (ouvre `config.toml`), à propos (versions de l'icône et du démon),
 quitter. **Molette** sur l'icône : ± un pas (les crans rapides sont regroupés) avec une notification
 de progression. Il n'y a pas de popup à glisseurs (écart documenté : `specs/DECISIONS.md` n° 84).
 

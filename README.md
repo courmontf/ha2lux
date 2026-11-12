@@ -28,7 +28,74 @@ cargo build --release          # binaries in target/release/
 
 Rust 1.85 or newer (see `rust-toolchain.toml`).
 
-## Installation (manual — ha2lux never modifies your system)
+## Installation
+
+### Quick install (from source)
+
+You need a Rust toolchain 1.85 or newer ([rustup](https://rustup.rs)) and a C linker
+(`build-essential` on Debian/Ubuntu, `base-devel` on Arch, `gcc` on Fedora). Then, from the
+repository root, copy and paste:
+
+```sh
+# 1. Build
+cargo build --release
+
+# 2. Install the programs for your user (no sudo)
+mkdir -p ~/.local/bin
+install -Dm755 target/release/ha2luxd target/release/ha2lux target/release/ha2lux-tray -t ~/.local/bin/
+sed "s|/usr/bin/ha2luxd|$HOME/.local/bin/ha2luxd|" packaging/systemd/ha2luxd.service \
+    | install -Dm644 /dev/stdin ~/.config/systemd/user/ha2luxd.service
+install -Dm644 packaging/dbus/org.ha2lux.Daemon.service ~/.local/share/dbus-1/services/org.ha2lux.Daemon.service
+sed "s|/usr/bin/ha2lux-tray|$HOME/.local/bin/ha2lux-tray|" packaging/xdg/autostart/ha2lux-tray.desktop \
+    | install -Dm644 /dev/stdin ~/.config/autostart/ha2lux-tray.desktop
+
+# 3. Allow access to the displays' I²C buses (needs sudo; external monitors only)
+sudo install -m644 packaging/modules-load.d/ha2lux-i2c-dev.conf /etc/modules-load.d/ && sudo modprobe i2c-dev
+sudo install -m644 packaging/udev/60-ha2lux-i2c.rules /etc/udev/rules.d/ \
+    && sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=i2c-dev
+
+# 4. Start the daemon and the icon
+systemctl --user daemon-reload && systemctl --user enable --now ha2luxd
+setsid -f ~/.local/bin/ha2lux-tray >/dev/null 2>&1
+
+# 5. Check that everything works
+ha2lux doctor && ha2lux get
+```
+
+Notes:
+
+- `~/.local/bin` must be in your `PATH` (it is by default on most distributions; otherwise add
+  `export PATH="$HOME/.local/bin:$PATH"` to your shell profile).
+- Step 3 is only needed for **external monitors**; a laptop's internal panel works without it.
+  If `ha2lux doctor` still reports "access denied" after step 3, log out and back in.
+- The icon starts by itself at your next login. On GNOME, install the "AppIndicator" extension
+  first, or no icon will appear.
+- Nothing outside the files listed above is touched: ha2lux never edits your system on its own.
+
+### Update
+
+```sh
+git pull && cargo build --release \
+&& install -Dm755 target/release/ha2luxd target/release/ha2lux target/release/ha2lux-tray -t ~/.local/bin/ \
+&& systemctl --user restart ha2luxd \
+&& pkill -x ha2lux-tray; setsid -f ~/.local/bin/ha2lux-tray >/dev/null 2>&1
+```
+
+Always restart the daemon after updating: the daemon and the other programs must be the same
+version. The icon's **About** submenu shows both versions and warns if they differ.
+
+### Uninstall
+
+```sh
+systemctl --user disable --now ha2luxd; pkill -x ha2lux-tray
+rm -f ~/.local/bin/{ha2luxd,ha2lux,ha2lux-tray} ~/.config/systemd/user/ha2luxd.service \
+      ~/.local/share/dbus-1/services/org.ha2lux.Daemon.service ~/.config/autostart/ha2lux-tray.desktop
+sudo rm -f /etc/udev/rules.d/60-ha2lux-i2c.rules /etc/modules-load.d/ha2lux-i2c-dev.conf
+```
+
+Your settings stay in `~/.config/ha2lux/` and `~/.local/state/ha2lux/` (delete them if you want).
+
+### Manual installation (details)
 
 1. **Binaries**: copy `ha2luxd`, `ha2lux`, `ha2lux-tray` to `~/.local/bin/` (or `/usr/bin/`).
 2. **I²C bus permissions** (external displays only):
@@ -40,7 +107,7 @@ Rust 1.85 or newer (see `rust-toolchain.toml`).
    `systemctl --user enable --now ha2luxd`. The file `packaging/dbus/org.ha2lux.Daemon.service`
    also allows on-demand startup.
 4. **Icon** (optional): run `ha2lux-tray`, or copy `packaging/xdg/autostart/ha2lux-tray.desktop`
-   to `~/.config/autostart/`. On GNOME, install the "AppIndicator" extension.
+   to `~/.config/autostart/` (adjust its `Exec=` path). On GNOME, install the "AppIndicator" extension.
 
 Package skeletons (Arch, RPM, Debian) are in `packaging/` — **untested**.
 
@@ -74,7 +141,7 @@ On Wayland an application cannot capture global keys: bind them to the CLI in yo
 ### Notification-area icon
 
 Menu: current level, "All displays" and a submenu per display (levels in 10% steps), presets,
-auto-brightness / schedule / idle dimming, rescan, settings (opens `config.toml`), quit.
+auto-brightness / schedule / idle dimming, rescan, settings (opens `config.toml`), About (tray and daemon versions), quit.
 **Mouse wheel** on the icon: ± one step (fast notches are merged) with a progress notification.
 There is no slider popup (documented deviation: `specs/DECISIONS.md` no. 84).
 

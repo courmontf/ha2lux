@@ -164,13 +164,66 @@ fn suspended_schedule_shows_its_resume_time() {
     assert!(labels(&build_menu(&s)).contains(&"Planning suspendu jusqu'à 20:00".to_owned()));
 }
 
+/// Lignes du sous-menu « À propos » (la dernière entrée avant « Quitter »).
+fn about_lines(s: &TrayState) -> Vec<String> {
+    let menu = build_menu(s);
+    match find(&menu, "À propos") {
+        Entry::Sub { entries, .. } => entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Item { label, enabled, .. } => {
+                    assert!(!enabled, "les lignes d'information sont grisées");
+                    Some(label.clone())
+                }
+                _ => None,
+            })
+            .collect(),
+        other => panic!("« À propos » devrait être un sous-menu : {other:?}"),
+    }
+}
+
+#[test]
+fn about_shows_the_tray_and_daemon_versions() {
+    let version = env!("CARGO_PKG_VERSION");
+    let mut s = state();
+    s.daemon_version = version.to_owned();
+    let lines = about_lines(&s);
+    assert_eq!(
+        lines,
+        [
+            format!("Icône ha2lux-tray {version}"),
+            format!("Démon ha2luxd {version}")
+        ]
+    );
+}
+
+#[test]
+fn about_warns_when_the_daemon_runs_another_version() {
+    let mut s = state();
+    s.daemon_version = "0.0.1".to_owned();
+    let lines = about_lines(&s);
+    assert_eq!(lines.len(), 3, "{lines:?}");
+    assert!(lines[1].contains("0.0.1"));
+    assert!(lines[2].contains("redémarrez le démon"));
+}
+
+#[test]
+fn about_handles_an_unknown_daemon_version() {
+    let lines = about_lines(&state());
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(lines[1].contains("version inconnue"));
+}
+
 #[test]
 fn unreachable_daemon_reduces_the_menu_to_a_message_and_quit() {
     let s = TrayState::default();
     let menu = build_menu(&s);
     let text = labels(&menu);
-    assert_eq!(text.len(), 2, "{text:?}");
-    assert!(text[0].contains("ne répond pas") && text[1] == "Quitter");
+    // Message, « À propos » (version de l'icône + démon injoignable), puis Quitter.
+    assert_eq!(text.len(), 5, "{text:?}");
+    assert!(text[0].contains("ne répond pas") && text[1] == "À propos");
+    assert!(text[2].contains(env!("CARGO_PKG_VERSION")), "{text:?}");
+    assert_eq!(text[4], "Quitter");
     assert_eq!(icon_name(&s), "dialog-warning-symbolic");
     assert_eq!(tooltip(&s), "démon injoignable");
 }
