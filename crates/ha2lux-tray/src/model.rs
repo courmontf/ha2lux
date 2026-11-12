@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use ha2lux_i18n::t;
 use ha2lux_ipc::DisplayDto;
 use zbus::zvariant::OwnedValue;
 
@@ -175,7 +176,7 @@ fn levels(make: impl Fn(u32) -> Action, current: Option<u8>) -> Vec<Entry> {
         .map(|&level| {
             let near = current.is_some_and(|c| u32::from(c).abs_diff(level) < 5);
             Entry::Check {
-                label: format!("{level} %"),
+                label: percent(level),
                 checked: near,
                 enabled: true,
                 action: make(level),
@@ -184,13 +185,17 @@ fn levels(make: impl Fn(u32) -> Action, current: Option<u8>) -> Vec<Entry> {
         .collect()
 }
 
-fn health_label(health: &str) -> &'static str {
+fn percent(value: impl std::fmt::Display) -> String {
+    t!("tray-percent", value = value.to_string())
+}
+
+fn health_label(health: &str) -> String {
     match health {
-        "ok" => "capteur : à jour",
-        "stale" => "capteur : mesure périmée",
-        "degraded" => "capteur : dégradé",
-        "offline" => "capteur : hors ligne",
-        _ => "capteur : inconnu",
+        "ok" => t!("tray-sensor-ok"),
+        "stale" => t!("tray-sensor-stale"),
+        "degraded" => t!("tray-sensor-degraded"),
+        "offline" => t!("tray-sensor-offline"),
+        _ => t!("tray-sensor-unknown"),
     }
 }
 
@@ -198,17 +203,17 @@ fn health_label(health: &str) -> &'static str {
 pub fn build_menu(state: &TrayState) -> Vec<Entry> {
     let mut menu = Vec::new();
     if !state.reachable {
-        menu.push(note("Le démon ha2luxd ne répond pas"));
+        menu.push(note(t!("tray-daemon-unreachable")));
         menu.push(Entry::Separator);
-        menu.push(item("Quitter", Action::Quit));
+        menu.push(item(t!("tray-quit"), Action::Quit));
         return menu;
     }
     menu.push(note(match state.master {
-        Some(level) => format!("Luminosité : {level} %"),
-        None => "Luminosité : inconnue".to_owned(),
+        Some(level) => t!("tray-brightness", level = percent(level)),
+        None => t!("tray-brightness-unknown"),
     }));
     menu.push(Entry::Sub {
-        label: "Tous les écrans".to_owned(),
+        label: t!("tray-all-displays"),
         enabled: !state.displays.is_empty(),
         entries: levels(Action::SetMaster, state.master),
     });
@@ -218,7 +223,11 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
             let id = display.id.clone();
             menu.push(Entry::Sub {
                 label: match level {
-                    Some(level) => format!("{} ({level} %)", display.name),
+                    Some(level) => t!(
+                        "tray-display-with-level",
+                        name = display.name.as_str(),
+                        level = percent(level)
+                    ),
                     None => display.name.clone(),
                 },
                 enabled: true,
@@ -231,14 +240,17 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
                 ),
             });
         } else {
-            menu.push(note(format!("{} (indisponible)", display.name)));
+            menu.push(note(t!(
+                "tray-display-unavailable",
+                name = display.name.as_str()
+            )));
         }
     }
     if !state.presets.is_empty() {
         menu.push(Entry::Separator);
         for (name, level) in &state.presets {
             menu.push(item(
-                format!("{name} — {level} %"),
+                t!("tray-preset", name = name.as_str(), level = percent(level)),
                 Action::Preset(name.clone()),
             ));
         }
@@ -246,9 +258,9 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
     menu.push(Entry::Separator);
     menu.push(Entry::Check {
         label: if state.auto_configured {
-            "Auto-luminosité (capteur Home Assistant)".to_owned()
+            t!("tray-auto-configured")
         } else {
-            "Auto-luminosité (non configurée)".to_owned()
+            t!("tray-auto-unconfigured")
         },
         checked: state.auto_enabled,
         enabled: state.auto_configured,
@@ -258,46 +270,52 @@ pub fn build_menu(state: &TrayState) -> Vec<Entry> {
         menu.push(note(health_label(&state.ha_health)));
     }
     let schedule_label = if state.auto_drives() {
-        "Planning (sert si Home Assistant est hors ligne)"
+        t!("tray-schedule-fallback")
     } else {
-        "Planning horaire"
+        t!("tray-schedule")
     };
     menu.push(Entry::Check {
-        label: schedule_label.to_owned(),
+        label: schedule_label,
         checked: state.schedule_enabled,
         // Grisé tant que l'auto-luminosité pilote ; sans point, il n'y a rien à activer.
         enabled: !state.auto_drives() && state.schedule_points > 0,
         action: Action::Toggle("schedule", !state.schedule_enabled),
     });
     if let Some(resume) = &state.schedule_resume {
-        menu.push(note(format!("Planning suspendu jusqu'à {resume}")));
+        menu.push(note(t!("tray-schedule-resume", resume = resume.as_str())));
     }
     menu.push(Entry::Check {
-        label: format!(
-            "Atténuation à l'inactivité ({} % après {} min)",
-            state.idle_level, state.idle_minutes
+        label: t!(
+            "tray-idle-dim",
+            level = state.idle_level.to_string(),
+            minutes = state.idle_minutes.to_string()
         ),
         checked: state.idle_enabled,
         enabled: true,
         action: Action::Toggle("idle-dim", !state.idle_enabled),
     });
     menu.push(Entry::Separator);
-    menu.push(item("Re-scanner les écrans", Action::Rescan));
-    menu.push(item("Réglages…", Action::OpenSettings));
-    menu.push(item("Quitter", Action::Quit));
+    menu.push(item(t!("tray-rescan"), Action::Rescan));
+    menu.push(item(t!("tray-settings"), Action::OpenSettings));
+    menu.push(item(t!("tray-quit"), Action::Quit));
     menu
 }
 
 /// Texte de l'infobulle.
 pub fn tooltip(state: &TrayState) -> String {
     if !state.reachable {
-        return "démon injoignable".to_owned();
+        return t!("tray-tooltip-unreachable");
     }
-    let level = state
-        .master
-        .map_or_else(|| "?".to_owned(), |m| format!("{m} %"));
-    let dim = if state.dimmed { " · atténué" } else { "" };
-    format!("{level} · {}{dim}", state.mode)
+    let level = state.master.map_or_else(|| "?".to_owned(), percent);
+    if state.dimmed {
+        t!(
+            "tray-tooltip-dimmed",
+            level = level,
+            mode = state.mode.as_str()
+        )
+    } else {
+        t!("tray-tooltip", level = level, mode = state.mode.as_str())
+    }
 }
 
 /// Nom de l'icône (thème freedesktop).

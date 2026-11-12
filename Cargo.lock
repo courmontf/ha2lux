@@ -807,6 +807,7 @@ dependencies = [
  "futures-util",
  "ha2lux-backends",
  "ha2lux-core",
+ "ha2lux-i18n",
  "ha2lux-ipc",
  "ha2luxd",
  "ksni",

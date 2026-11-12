@@ -44,6 +44,7 @@ const CATALOGS: &[Catalog] = &[Catalog {
     files: &[
         ("common.ftl", include_str!("../locales/fr/common.ftl")),
         ("cli.ftl", include_str!("../locales/fr/cli.ftl")),
+        ("tray.ftl", include_str!("../locales/fr/tray.ftl")),
     ],
 }];
 

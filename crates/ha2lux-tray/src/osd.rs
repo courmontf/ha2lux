@@ -53,7 +53,7 @@ pub fn hints(level: u8) -> HashMap<&'static str, Value<'static>> {
 
 /// Texte de l'OSD.
 pub fn summary(level: u8) -> String {
-    format!("Luminosité {level} %")
+    ha2lux_i18n::t!("tray-osd", level = level.to_string())
 }
 
 /// Affichage de l'OSD.

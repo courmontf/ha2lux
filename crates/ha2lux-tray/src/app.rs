@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use ha2lux_i18n::t;
 use ha2lux_ipc::DaemonProxy;
 use ksni::menu::{CheckmarkItem, StandardItem, SubMenu};
 use ksni::{MenuItem, Orientation, ToolTip, TrayMethods};
@@ -33,11 +34,8 @@ pub enum AppError {
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Bus(e) => write!(f, "bus de session indisponible : {e}"),
-            Self::NoWatcher(e) => write!(
-                f,
-                "aucune zone de notification (StatusNotifierWatcher) : {e}. Sous GNOME, installez l'extension « AppIndicator »."
-            ),
+            Self::Bus(e) => f.write_str(&t!("tray-err-bus", error = e.as_str())),
+            Self::NoWatcher(e) => f.write_str(&t!("tray-err-no-watcher", error = e.as_str())),
         }
     }
 }
@@ -202,7 +200,7 @@ pub async fn run(options: AppOptions) -> Result<(), AppError> {
     {
         Ok(handle) => handle,
         Err(ksni::Error::WontShow) => {
-            return Err(AppError::NoWatcher("aucun hôte d'icônes".to_owned()));
+            return Err(AppError::NoWatcher(t!("tray-detail-no-host")));
         }
         Err(error) => return Err(AppError::NoWatcher(error.to_string())),
     };

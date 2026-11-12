@@ -4,16 +4,9 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use ha2lux_i18n::t;
 use ha2lux_tray::app::{AppOptions, run};
 use tracing_subscriber::EnvFilter;
-
-const USAGE: &str = "usage : ha2lux-tray [--help | --version]
-
-Icône de zone de notification (StatusNotifierItem) pour ha2lux : menu des presets,
-molette pour ajuster la luminosité, bascules planning / auto / atténuation.
-Le démon ha2luxd doit tourner ; l'icône l'interroge par D-Bus.
-
-codes de sortie : 0 arrêt normal, 1 usage, 3 pas de zone de notification ou de bus";
 
 fn config_file() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
@@ -29,7 +22,7 @@ async fn main() -> ExitCode {
     match std::env::args().nth(1).as_deref() {
         None => {}
         Some("--help" | "-h") => {
-            println!("{USAGE}");
+            println!("{}", t!("tray-usage"));
             return ExitCode::SUCCESS;
         }
         Some("--version" | "-V") => {
@@ -37,7 +30,11 @@ async fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Some(other) => {
-            eprintln!("argument inattendu : {other}\n{USAGE}");
+            eprintln!(
+                "{}\n{}",
+                t!("tray-unexpected-argument", arg = other),
+                t!("tray-usage")
+            );
             return ExitCode::from(1);
         }
     }
@@ -55,7 +52,7 @@ async fn main() -> ExitCode {
     {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("erreur : {error}");
+            eprintln!("{}", t!("tray-error", error = error.to_string()));
             ExitCode::from(3)
         }
     }
